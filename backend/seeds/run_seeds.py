@@ -17,6 +17,7 @@ from app.models.budget_item import BudgetItem
 from app.models.system_config import SystemConfig
 from app.models.alert import Alert
 from app.models.audit_log import AuditLog
+from app.models.bank_account import BankAccount
 from app.models.expense import Expense
 
 
@@ -141,6 +142,17 @@ def seed():
             ))
         db.flush()
         print(f"  {len(budget_items)} partidas presupuestarias creadas.")
+
+        # --- Cuentas bancarias ---
+        bank_accounts = [
+            ("BancoEstado", "00-000-00000-00", "corriente", "Cuenta Corriente CBT"),
+            ("Banco Santander", "00-000-00001-00", "corriente", "Cuenta Operacional"),
+            ("BancoEstado", "00-000-00002-00", "ahorro", "Cuenta Ahorro Reserva"),
+        ]
+        for bank, number, acc_type, alias in bank_accounts:
+            db.add(BankAccount(bank_name=bank, account_number=number, account_type=acc_type, alias=alias, balance=0))
+        db.flush()
+        print(f"  {len(bank_accounts)} cuentas bancarias creadas.")
 
         # --- Configuración del sistema ---
         configs = [

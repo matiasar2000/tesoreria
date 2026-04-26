@@ -28,6 +28,16 @@ class ExpenseUpdate(BaseModel):
     notes: str | None = None
 
 
+class ApprovalStepBrief(BaseModel):
+    id: uuid.UUID
+    step_order: int
+    role_required: str
+    label: str
+    status: str
+    acted_by_name: str | None = None
+    acted_at: datetime | None = None
+
+
 class ExpenseResponse(BaseModel):
     id: uuid.UUID
     budget_item_id: uuid.UUID
@@ -50,5 +60,6 @@ class ExpenseResponse(BaseModel):
     updated_at: datetime
     budget_item_name: str | None = None
     requested_by_name: str | None = None
+    approval_steps: list[ApprovalStepBrief] = []
 
     model_config = {"from_attributes": True}

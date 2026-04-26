@@ -19,6 +19,10 @@ class RejectBody(BaseModel):
     reason: str | None = None
 
 
+class ApprovalBody(BaseModel):
+    notes: str | None = None
+
+
 @router.get("", response_model=PaginatedResponse[ExpenseResponse])
 def list_expenses(
     fiscal_year_id: uuid.UUID | None = None,
@@ -58,13 +62,24 @@ def update_expense(
     return expense_service.update_expense(db, expense_id, data)
 
 
+@router.patch("/{expense_id}/advance", response_model=ExpenseResponse)
+def advance_approval(
+    expense_id: uuid.UUID,
+    body: ApprovalBody | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return expense_service.advance_approval(db, expense_id, current_user, body.notes if body else None)
+
+
 @router.patch("/{expense_id}/approve", response_model=ExpenseResponse)
 def approve_expense(
     expense_id: uuid.UUID,
+    body: ApprovalBody | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_tesorero),
+    current_user: User = Depends(get_current_user),
 ):
-    return expense_service.approve_expense(db, expense_id, current_user)
+    return expense_service.advance_approval(db, expense_id, current_user, body.notes if body else None)
 
 
 @router.patch("/{expense_id}/reject", response_model=ExpenseResponse)
@@ -72,7 +87,7 @@ def reject_expense(
     expense_id: uuid.UUID,
     body: RejectBody | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_tesorero),
+    current_user: User = Depends(get_current_user),
 ):
     return expense_service.reject_expense(db, expense_id, current_user, body.reason if body else None)
 

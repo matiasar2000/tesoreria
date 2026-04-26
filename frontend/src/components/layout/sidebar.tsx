@@ -9,6 +9,10 @@ import {
   Receipt,
   Upload,
   Bell,
+  Users,
+  Landmark,
+  FileText,
+  Lock,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -19,6 +23,10 @@ const navItems = [
   { href: "/gastos", label: "Gastos", icon: Receipt },
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/importar", label: "Importar", icon: Upload },
+  { href: "/banco", label: "Banco", icon: Landmark },
+  { href: "/rendiciones", label: "Rendiciones", icon: FileText },
+  { href: "/cierre", label: "Cierre Contable", icon: Lock },
+  { href: "/usuarios", label: "Usuarios", icon: Users },
 ];
 
 export function Sidebar() {

@@ -7,7 +7,7 @@ Independiente de Manager+, enfocado en control presupuestario y registro de gast
 
 ## Estado actual
 
-El proyecto se encuentra en **Fase 1 (MVP)** — funcional y operativo en ambiente local con Docker.
+El proyecto se encuentra en **Fase 2** — con todos los modulos principales implementados y operativo en ambiente local con Docker.
 
 Se puede levantar todo el sistema con un solo comando (`docker-compose up --build`) y acceder desde el navegador.
 
@@ -154,20 +154,6 @@ Listado de las compañias del CBT. Precargadas con datos reales (10 compañias).
 
 ---
 
-## Navegacion del sistema
-
-La aplicacion tiene un menu lateral (sidebar) con los siguientes enlaces:
-
-1. **Dashboard** (`/dashboard`) — Panel principal
-2. **Presupuesto** (`/presupuesto`) — Control presupuestario
-3. **Gastos** (`/gastos`) — Gestion de gastos
-4. **Importar** (`/importar`) — Importacion Excel
-5. **Alertas** (`/alertas`) — Centro de notificaciones
-
-**Archivos de navegacion:**
-- `frontend/src/components/layout/sidebar.tsx` — Menu lateral
-- `frontend/src/components/layout/header.tsx` — Barra superior con icono de alertas
-
 ---
 
 ## Datos precargados (Seeds)
@@ -208,13 +194,127 @@ Abrir `http://localhost:3000` en el navegador.
 
 ---
 
+### 9. Gestion de usuarios (frontend)
+
+Pantalla para administrar usuarios del sistema desde la interfaz web.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Usuarios | `/usuarios` | Tabla de usuarios con crear, editar y activar/desactivar |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/usuarios/page.tsx` — Pantalla de gestion de usuarios
+- `backend/app/api/v1/users.py` — Endpoints de usuarios (ya existia)
+- `backend/app/services/user_service.py` — Logica de usuarios (ya existia)
+
+---
+
+### 10. Exportacion a Excel
+
+Descarga de reportes en formato Excel desde presupuesto y gastos.
+
+**Archivos relacionados:**
+- `backend/app/api/v1/exports.py` — Endpoints de exportacion (presupuesto y gastos)
+- Botones integrados en `/presupuesto` y `/gastos`
+
+---
+
+### 11. Documentos de respaldo
+
+Subida de archivos (boletas, facturas, PDF) asociados a cada gasto.
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/gastos/page.tsx` — Seccion de documentos integrada en gastos
+- `backend/app/api/v1/documents.py` — Endpoints de documentos (upload, download, delete)
+- `backend/app/services/document_service.py` — Logica de almacenamiento de archivos
+- `backend/app/models/document.py` — Modelo de documento
+- `backend/app/schemas/document.py` — Schema de documento
+
+---
+
+### 12. Flujo de aprobacion multi-paso
+
+Cada gasto pasa por un flujo escalonado de aprobacion:
+
+1. **Paso 1:** Revision por equipo de tesoreria
+2. **Paso 2:** Aprobacion del tesorero
+3. **Paso 3 (si monto > 5 IMM):** Aprobacion del directorio
+
+El presupuesto se descuenta solo cuando se completan todos los pasos. Si se rechaza en cualquier paso, el gasto queda rechazado.
+
+**Archivos relacionados:**
+- `backend/app/models/approval_step.py` — Modelo de paso de aprobacion
+- `backend/app/services/expense_service.py` — Logica de flujo multi-paso
+- `backend/app/api/v1/expenses.py` — Endpoints de avance/rechazo
+- `frontend/src/app/(app)/gastos/page.tsx` — Visualizacion del flujo con indicadores
+
+---
+
+### 13. Conciliacion bancaria
+
+Modulo para registrar cuentas bancarias, movimientos y conciliar con gastos aprobados.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Banco | `/banco` | Cuentas bancarias, movimientos y conciliacion |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/banco/page.tsx` — Pantalla de conciliacion
+- `backend/app/api/v1/bank.py` — Endpoints de banco
+- `backend/app/services/bank_service.py` — Logica de conciliacion
+- `backend/app/models/bank_account.py` — Modelo de cuenta bancaria
+- `backend/app/models/bank_transaction.py` — Modelo de movimiento bancario
+
+---
+
+### 14. Rendiciones
+
+Generacion de rendiciones por compañia y periodo. Agrupa gastos aprobados y permite enviar/aprobar la rendicion.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Rendiciones | `/rendiciones` | Crear, enviar y aprobar rendiciones por compañia |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/rendiciones/page.tsx` — Pantalla de rendiciones
+- `backend/app/api/v1/renditions.py` — Endpoints de rendiciones
+- `backend/app/services/rendition_service.py` — Logica de rendiciones
+- `backend/app/models/rendition.py` — Modelos de rendicion y items
+
+---
+
+### 15. Cierre contable
+
+Cierre del año fiscal: bloquea todas las partidas y previene nuevos gastos. Requiere que no haya gastos pendientes.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Cierre | `/cierre` | Resumen del año fiscal con opcion de cerrar/reabrir |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/cierre/page.tsx` — Pantalla de cierre contable
+- `backend/app/api/v1/fiscal_close.py` — Endpoints de cierre
+- `backend/app/services/fiscal_close_service.py` — Logica de cierre y reapertura
+
+---
+
+## Navegacion del sistema actualizada
+
+1. **Dashboard** (`/dashboard`) — Panel principal
+2. **Presupuesto** (`/presupuesto`) — Control presupuestario con exportacion Excel
+3. **Gastos** (`/gastos`) — Gestion de gastos con flujo multi-paso y documentos
+4. **Alertas** (`/alertas`) — Centro de notificaciones
+5. **Importar** (`/importar`) — Importacion Excel
+6. **Banco** (`/banco`) — Conciliacion bancaria
+7. **Rendiciones** (`/rendiciones`) — Rendiciones por compañia
+8. **Cierre** (`/cierre`) — Cierre contable del año fiscal
+9. **Usuarios** (`/usuarios`) — Administracion de usuarios
+
+---
+
 ## Modulos pendientes (futuras fases)
 
-- Pantalla de administracion de usuarios en el frontend
-- Exportacion a Excel
-- Flujo de aprobacion multi-paso
-- Conciliacion bancaria
-- Rendiciones
-- Cierre contable por compañia
-- Subida de documentos de respaldo
 - Modulos de IA y automatizacion
+- Importacion de cartolas bancarias (CSV/Excel)
+- Reportes avanzados y graficos
+- Notificaciones por email

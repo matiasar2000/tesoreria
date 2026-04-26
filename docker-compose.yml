@@ -27,6 +27,7 @@ services:
       - ENVIRONMENT=development
     volumes:
       - ./backend:/app
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -44,3 +45,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

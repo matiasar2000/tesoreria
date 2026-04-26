@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type { BudgetItem, FiscalYear } from "@/types/api";
 import { Header } from "@/components/layout/header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -16,7 +18,36 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCLP, formatPercent } from "@/lib/utils";
-import { Lock } from "lucide-react";
+import { Download, Lock } from "lucide-react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+async function downloadExcel(path: string, filename: string): Promise<void> {
+  const token = localStorage.getItem("access_token");
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+
+  if (response.status === 401) {
+    localStorage.removeItem("access_token");
+    window.location.href = "/login";
+    return;
+  }
+
+  if (!response.ok) {
+    throw new Error("No se pudo exportar el archivo Excel.");
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 function TrafficLight({ color }: { color: string }) {
   return (
@@ -33,6 +64,7 @@ function TrafficLight({ color }: { color: string }) {
 
 export default function PresupuestoPage() {
   const router = useRouter();
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data: fiscalYears } = useQuery({
     queryKey: ["fiscal-years"],
@@ -49,6 +81,19 @@ export default function PresupuestoPage() {
 
   const totalAllocated = items?.reduce((sum, i) => sum + i.allocated_amount, 0) ?? 0;
   const totalExecuted = items?.reduce((sum, i) => sum + i.executed_amount, 0) ?? 0;
+
+  const handleExportBudget = async (): Promise<void> => {
+    if (!currentFY) return;
+
+    setIsExporting(true);
+    try {
+      await downloadExcel(`/exports/budget?fiscal_year_id=${currentFY.id}`, `presupuesto-${currentFY.year}.xlsx`);
+    } catch {
+      alert("No se pudo exportar el presupuesto a Excel.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <>
@@ -84,6 +129,18 @@ export default function PresupuestoPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Partidas Presupuestarias {currentFY?.year}</CardTitle>
+            <CardAction>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportBudget}
+                disabled={!currentFY || isExporting}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {isExporting ? "Exportando..." : "Exportar Excel"}
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             {isLoading ? (

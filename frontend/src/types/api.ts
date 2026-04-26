@@ -35,6 +35,16 @@ export interface BudgetItem {
   is_blocked: boolean;
 }
 
+export interface ApprovalStep {
+  id: string;
+  step_order: number;
+  role_required: string;
+  label: string;
+  status: string;
+  acted_by_name: string | null;
+  acted_at: string | null;
+}
+
 export interface Expense {
   id: string;
   budget_item_id: string;
@@ -57,6 +67,17 @@ export interface Expense {
   updated_at: string;
   budget_item_name: string | null;
   requested_by_name: string | null;
+  approval_steps: ApprovalStep[];
+}
+
+export interface Document {
+  id: string;
+  expense_id: string;
+  original_filename: string;
+  content_type: string;
+  file_size: number;
+  uploaded_by_id: string;
+  created_at: string;
 }
 
 export interface Alert {

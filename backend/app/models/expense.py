@@ -38,3 +38,4 @@ class Expense(Base):
     budget_item = relationship("BudgetItem", lazy="selectin")
     requested_by = relationship("User", foreign_keys=[requested_by_id], lazy="selectin")
     approved_by = relationship("User", foreign_keys=[approved_by_id], lazy="selectin")
+    approval_steps = relationship("ApprovalStep", lazy="selectin", order_by="ApprovalStep.step_order")
