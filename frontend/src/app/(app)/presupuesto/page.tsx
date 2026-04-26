@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type { BudgetItem, FiscalYear } from "@/types/api";
 import { Header } from "@/components/layout/header";
@@ -31,6 +32,8 @@ function TrafficLight({ color }: { color: string }) {
 }
 
 export default function PresupuestoPage() {
+  const router = useRouter();
+
   const { data: fiscalYears } = useQuery({
     queryKey: ["fiscal-years"],
     queryFn: () => api.get<FiscalYear[]>("/fiscal-years"),
@@ -102,7 +105,11 @@ export default function PresupuestoPage() {
                   </TableHeader>
                   <TableBody>
                     {items?.map((item) => (
-                      <TableRow key={item.id} className={cn(item.is_blocked && "bg-red-50")}>
+                      <TableRow
+                        key={item.id}
+                        className={cn(item.is_blocked && "bg-red-50", "cursor-pointer hover:bg-muted/50")}
+                        onClick={() => router.push(`/presupuesto/${item.id}?fy=${currentFY!.id}`)}
+                      >
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <TrafficLight color={item.status_color} />

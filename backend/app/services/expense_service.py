@@ -41,19 +41,13 @@ def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> Expe
         supplier_name=data.supplier_name,
         invoice_number=data.invoice_number,
         expense_date=data.expense_date,
-        status="approved",
+        status="pending_approval",
         requires_quotations=requires_quotations,
         authorized_by_superintendent=data.authorized_by_superintendent,
         requested_by_id=current_user.id,
-        approved_by_id=current_user.id,
         notes=data.notes,
     )
     db.add(expense)
-
-    item.executed_amount = Decimal(str(item.executed_amount)) + Decimal(str(data.amount))
-    budget_service.check_auto_block(db, item)
-
-    _generate_budget_alerts(db, item)
 
     if data.authorized_by_superintendent:
         fy = db.query(FiscalYear).filter(FiscalYear.id == item.fiscal_year_id).first()
@@ -74,6 +68,70 @@ def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> Expe
                 related_entity_id=expense.id,
             )
 
+    db.commit()
+    db.refresh(expense)
+    return _to_response(expense)
+
+
+def approve_expense(db: Session, expense_id: uuid.UUID, approver: User) -> ExpenseResponse:
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado.")
+    if expense.status != "pending_approval":
+        raise HTTPException(status_code=400, detail="Solo se pueden aprobar gastos pendientes de aprobación.")
+
+    item = budget_service.get_budget_item(db, expense.budget_item_id)
+    if item.is_blocked:
+        raise BudgetItemBlocked(item.name)
+    available = float(item.allocated_amount) - float(item.executed_amount)
+    if expense.amount > available:
+        raise InsufficientBudget(item.name, int(available), int(expense.amount))
+
+    expense.status = "approved"
+    expense.approved_by_id = approver.id
+
+    item.executed_amount = Decimal(str(item.executed_amount)) + Decimal(str(expense.amount))
+    budget_service.check_auto_block(db, item)
+    _generate_budget_alerts(db, item)
+
+    db.commit()
+    db.refresh(expense)
+    return _to_response(expense)
+
+
+def reject_expense(db: Session, expense_id: uuid.UUID, approver: User, reason: str | None = None) -> ExpenseResponse:
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado.")
+    if expense.status != "pending_approval":
+        raise HTTPException(status_code=400, detail="Solo se pueden rechazar gastos pendientes de aprobación.")
+
+    expense.status = "rejected"
+    expense.approved_by_id = approver.id
+    if reason:
+        expense.notes = f"[Rechazado] {reason}" if not expense.notes else f"{expense.notes}\n[Rechazado] {reason}"
+
+    db.commit()
+    db.refresh(expense)
+    return _to_response(expense)
+
+
+def void_expense(db: Session, expense_id: uuid.UUID) -> ExpenseResponse:
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado.")
+    if expense.status == "voided":
+        raise HTTPException(status_code=400, detail="El gasto ya está anulado.")
+
+    if expense.status == "approved":
+        item = budget_service.get_budget_item(db, expense.budget_item_id)
+        item.executed_amount = Decimal(str(item.executed_amount)) - Decimal(str(expense.amount))
+        if item.is_blocked:
+            pct = (float(item.executed_amount) / float(item.allocated_amount)) * 100 if item.allocated_amount else 0
+            if pct < float(item.red_threshold):
+                item.is_blocked = False
+
+    expense.status = "voided"
     db.commit()
     db.refresh(expense)
     return _to_response(expense)

@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -12,6 +13,10 @@ from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from app.services import expense_service
 
 router = APIRouter(prefix="/expenses", tags=["Gastos"])
+
+
+class RejectBody(BaseModel):
+    reason: str | None = None
 
 
 @router.get("", response_model=PaginatedResponse[ExpenseResponse])
@@ -51,6 +56,34 @@ def update_expense(
     _: User = Depends(require_tesorero_or_equipo),
 ):
     return expense_service.update_expense(db, expense_id, data)
+
+
+@router.patch("/{expense_id}/approve", response_model=ExpenseResponse)
+def approve_expense(
+    expense_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_tesorero),
+):
+    return expense_service.approve_expense(db, expense_id, current_user)
+
+
+@router.patch("/{expense_id}/reject", response_model=ExpenseResponse)
+def reject_expense(
+    expense_id: uuid.UUID,
+    body: RejectBody | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_tesorero),
+):
+    return expense_service.reject_expense(db, expense_id, current_user, body.reason if body else None)
+
+
+@router.patch("/{expense_id}/void", response_model=ExpenseResponse)
+def void_expense(
+    expense_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tesorero),
+):
+    return expense_service.void_expense(db, expense_id)
 
 
 @router.delete("/{expense_id}", status_code=204)

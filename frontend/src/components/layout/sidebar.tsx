@@ -17,6 +17,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/presupuesto", label: "Presupuesto", icon: PieChart },
   { href: "/gastos", label: "Gastos", icon: Receipt },
+  { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/importar", label: "Importar", icon: Upload },
 ];
 

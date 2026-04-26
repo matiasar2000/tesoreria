@@ -17,7 +17,7 @@ export function Header({ title }: { title: string }) {
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-card px-6">
       <h1 className="text-lg font-semibold">{title}</h1>
       <div className="flex items-center gap-2">
-        <Link href="/dashboard" className="relative inline-flex items-center justify-center rounded-md p-2 hover:bg-muted transition-colors">
+        <Link href="/alertas" className="relative inline-flex items-center justify-center rounded-md p-2 hover:bg-muted transition-colors">
           <Bell className="h-4 w-4" />
           {data && data.count > 0 && (
             <Badge
