@@ -122,3 +122,55 @@ export interface Company {
   name: string;
   is_active: boolean;
 }
+
+export interface MonthlyExpense {
+  month: number;
+  month_name: string;
+  total: number;
+  count: number;
+}
+
+export interface BudgetExecution {
+  item_number: number;
+  item_name: string;
+  allocated: number;
+  executed: number;
+  available: number;
+  percentage: number;
+  status_color: string;
+}
+
+export interface CompanyExpense {
+  company_name: string;
+  total: number;
+  count: number;
+  percentage_of_total: number;
+}
+
+export interface TopSupplier {
+  supplier_name: string;
+  total: number;
+  count: number;
+}
+
+export interface StatusBreakdown {
+  status: string;
+  label: string;
+  count: number;
+  total: number;
+}
+
+export interface ReportsSummary {
+  fiscal_year: number;
+  total_budget: number;
+  total_executed: number;
+  total_available: number;
+  execution_percentage: number;
+  monthly_expenses: MonthlyExpense[];
+  budget_execution: BudgetExecution[];
+  company_expenses: CompanyExpense[];
+  top_suppliers: TopSupplier[];
+  status_breakdown: StatusBreakdown[];
+  avg_expense_amount: number;
+  total_expenses_count: number;
+}

@@ -63,3 +63,11 @@ class BankTransactionResponse(BaseModel):
 class ReconcileRequest(BaseModel):
     transaction_id: uuid.UUID
     expense_id: uuid.UUID
+
+
+class ImportStatementResponse(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[str]
+    total_credit: float
+    total_debit: float

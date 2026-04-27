@@ -208,7 +208,7 @@ export default function RendicionesPage() {
           >
             <div>
               <Label>Año Fiscal</Label>
-              <Select value={newRendition.fiscal_year_id} onValueChange={(v: string) => setNewRendition({ ...newRendition, fiscal_year_id: v })}>
+              <Select value={newRendition.fiscal_year_id} onValueChange={(v: any) => setNewRendition({ ...newRendition, fiscal_year_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
                   {fiscalYears?.map((fy) => (
@@ -219,7 +219,7 @@ export default function RendicionesPage() {
             </div>
             <div>
               <Label>Compañia</Label>
-              <Select value={newRendition.company_id} onValueChange={(v: string) => setNewRendition({ ...newRendition, company_id: v })}>
+              <Select value={newRendition.company_id} onValueChange={(v: any) => setNewRendition({ ...newRendition, company_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
                   {companies?.map((c) => (

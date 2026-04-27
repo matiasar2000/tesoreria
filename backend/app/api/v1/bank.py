@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -13,6 +13,7 @@ from app.schemas.bank import (
     BankAccountUpdate,
     BankTransactionCreate,
     BankTransactionResponse,
+    ImportStatementResponse,
     ReconcileRequest,
 )
 from app.schemas.common import PaginatedResponse
@@ -68,6 +69,16 @@ def reconcile(data: ReconcileRequest, db: Session = Depends(get_db), _: User = D
 @router.patch("/transactions/{transaction_id}/unreconcile", response_model=BankTransactionResponse)
 def unreconcile(transaction_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_tesorero)):
     return bank_service.unreconcile(db, transaction_id)
+
+
+@router.post("/import-statement", response_model=ImportStatementResponse)
+def import_statement(
+    file: UploadFile = File(...),
+    bank_account_id: str = Form(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tesorero),
+):
+    return bank_service.import_bank_statement(db, file, uuid.UUID(bank_account_id))
 
 
 @router.get("/reconciliation-summary")

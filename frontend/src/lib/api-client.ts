@@ -82,6 +82,13 @@ class ApiClient {
       body: formData,
     });
   }
+
+  uploadForm<T>(path: string, formData: FormData): Promise<T> {
+    return this.request<T>(path, {
+      method: "POST",
+      body: formData,
+    });
+  }
 }
 
 export const api = new ApiClient();

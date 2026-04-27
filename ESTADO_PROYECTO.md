@@ -298,6 +298,44 @@ Cierre del año fiscal: bloquea todas las partidas y previene nuevos gastos. Req
 
 ---
 
+### 16. Importacion de cartolas bancarias
+
+Carga masiva de movimientos bancarios desde archivos CSV o Excel. Detecta automaticamente las columnas (fecha, descripcion/glosa, monto o cargo/abono, referencia). Soporta multiples formatos de fecha y encoding (UTF-8, Latin-1, CP1252). Actualiza el saldo de la cuenta automaticamente.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Banco | `/banco` | Boton "Importar Cartola" en la pestaña de movimientos |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/banco/page.tsx` — Dialog de importacion integrado
+- `backend/app/api/v1/bank.py` — Endpoint POST /bank/import-statement
+- `backend/app/services/bank_service.py` — Logica de parsing CSV/Excel y creacion de transacciones
+
+---
+
+### 17. Reportes avanzados
+
+Pagina dedicada con multiples graficos interactivos para analisis financiero:
+
+- Tendencia mensual de gastos (grafico de linea)
+- Ejecucion presupuestaria por partida (barras horizontales con semaforo)
+- Distribucion de gastos por compañia (grafico de torta)
+- Presupuesto asignado vs ejecutado (barras agrupadas)
+- Top 10 proveedores por monto
+- Desglose de gastos por estado
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Reportes | `/reportes` | Dashboard analitico con 6 graficos interactivos |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/reportes/page.tsx` — Pagina de reportes con recharts
+- `backend/app/api/v1/reports.py` — Endpoint GET /reports/summary
+- `backend/app/services/report_service.py` — Logica de agregacion y calculos
+- `backend/app/schemas/reports.py` — Schemas de respuesta
+
+---
+
 ## Navegacion del sistema actualizada
 
 1. **Dashboard** (`/dashboard`) — Panel principal
@@ -305,16 +343,15 @@ Cierre del año fiscal: bloquea todas las partidas y previene nuevos gastos. Req
 3. **Gastos** (`/gastos`) — Gestion de gastos con flujo multi-paso y documentos
 4. **Alertas** (`/alertas`) — Centro de notificaciones
 5. **Importar** (`/importar`) — Importacion Excel
-6. **Banco** (`/banco`) — Conciliacion bancaria
-7. **Rendiciones** (`/rendiciones`) — Rendiciones por compañia
-8. **Cierre** (`/cierre`) — Cierre contable del año fiscal
-9. **Usuarios** (`/usuarios`) — Administracion de usuarios
+6. **Reportes** (`/reportes`) — Reportes avanzados con graficos
+7. **Banco** (`/banco`) — Conciliacion bancaria con importacion de cartolas
+8. **Rendiciones** (`/rendiciones`) — Rendiciones por compañia
+9. **Cierre** (`/cierre`) — Cierre contable del año fiscal
+10. **Usuarios** (`/usuarios`) — Administracion de usuarios
 
 ---
 
 ## Modulos pendientes (futuras fases)
 
 - Modulos de IA y automatizacion
-- Importacion de cartolas bancarias (CSV/Excel)
-- Reportes avanzados y graficos
 - Notificaciones por email

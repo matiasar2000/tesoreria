@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCLP, formatDate } from "@/lib/utils";
-import { Plus, Link2, Unlink } from "lucide-react";
+import { Plus, Link2, Unlink, Upload } from "lucide-react";
 
 interface BankAccount {
   id: string;
@@ -82,8 +82,12 @@ export default function BancoPage() {
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
   const [showNewAccount, setShowNewAccount] = useState(false);
   const [showNewTx, setShowNewTx] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showReconcile, setShowReconcile] = useState<BankTransaction | null>(null);
   const [reconcileFilter, setReconcileFilter] = useState<boolean | null>(false);
+  const [importAccount, setImportAccount] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[]; total_credit: number; total_debit: number } | null>(null);
 
   const [newAccount, setNewAccount] = useState({ bank_name: "", account_number: "", account_type: "corriente", alias: "", balance: "" });
   const [newTx, setNewTx] = useState({ bank_account_id: "", transaction_date: "", amount: "", transaction_type: "debit", reference: "", description: "" });
@@ -153,6 +157,21 @@ export default function BancoPage() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: (data: { file: File; bank_account_id: string }) => {
+      const formData = new FormData();
+      formData.append("file", data.file);
+      formData.append("bank_account_id", data.bank_account_id);
+      return api.uploadForm<{ imported: number; skipped: number; errors: string[]; total_credit: number; total_debit: number }>("/bank/import-statement", formData);
+    },
+    onSuccess: (result) => {
+      setImportResult(result);
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-summary"] });
+    },
+  });
+
   return (
     <>
       <Header title="Conciliacion Bancaria" />
@@ -193,7 +212,7 @@ export default function BancoPage() {
           <TabsContent value="transactions" className="space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <Select value={selectedAccount} onValueChange={(v: string) => setSelectedAccount(v)}>
+                <Select value={selectedAccount} onValueChange={(v: any) => setSelectedAccount(v)}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Todas las cuentas" />
                   </SelectTrigger>
@@ -216,10 +235,16 @@ export default function BancoPage() {
                   </Button>
                 </div>
               </div>
-              <Button onClick={() => setShowNewTx(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Nuevo Movimiento
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); setImportAccount(""); }}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar Cartola
+                </Button>
+                <Button onClick={() => setShowNewTx(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo Movimiento
+                </Button>
+              </div>
             </div>
 
             <Card>
@@ -359,7 +384,7 @@ export default function BancoPage() {
               </div>
               <div>
                 <Label>Tipo</Label>
-                <Select value={newAccount.account_type} onValueChange={(v: string) => setNewAccount({ ...newAccount, account_type: v })}>
+                <Select value={newAccount.account_type} onValueChange={(v: any) => setNewAccount({ ...newAccount, account_type: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="corriente">Corriente</SelectItem>
@@ -395,7 +420,7 @@ export default function BancoPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Cuenta</Label>
-                <Select value={newTx.bank_account_id} onValueChange={(v: string) => setNewTx({ ...newTx, bank_account_id: v })}>
+                <Select value={newTx.bank_account_id} onValueChange={(v: any) => setNewTx({ ...newTx, bank_account_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                   <SelectContent>
                     {accounts?.map((a) => (
@@ -414,7 +439,7 @@ export default function BancoPage() {
               </div>
               <div>
                 <Label>Tipo</Label>
-                <Select value={newTx.transaction_type} onValueChange={(v: string) => setNewTx({ ...newTx, transaction_type: v })}>
+                <Select value={newTx.transaction_type} onValueChange={(v: any) => setNewTx({ ...newTx, transaction_type: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="debit">Egreso</SelectItem>
@@ -469,6 +494,80 @@ export default function BancoPage() {
                   <p className="text-muted-foreground text-center py-4">No hay gastos aprobados disponibles.</p>
                 )}
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Cartola Bancaria</DialogTitle>
+          </DialogHeader>
+          {!importResult ? (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (importFile && importAccount) {
+                  importMutation.mutate({ file: importFile, bank_account_id: importAccount });
+                }
+              }}
+            >
+              <div>
+                <Label>Cuenta Bancaria</Label>
+                <Select value={importAccount} onValueChange={(v: any) => setImportAccount(v)}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent>
+                    {accounts?.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.alias} — {a.bank_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Archivo (CSV o Excel)</Label>
+                <Input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,.txt"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Columnas esperadas: fecha, descripcion/glosa, monto (o cargo/abono), referencia (opcional)
+                </p>
+              </div>
+              <Button type="submit" disabled={importMutation.isPending || !importFile || !importAccount} className="w-full">
+                {importMutation.isPending ? "Importando..." : "Importar"}
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-green-50 rounded-md text-center">
+                  <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                  <p className="text-xs text-green-700">Importados</p>
+                </div>
+                <div className="p-3 bg-orange-50 rounded-md text-center">
+                  <p className="text-2xl font-bold text-orange-600">{importResult.skipped}</p>
+                  <p className="text-xs text-orange-700">Omitidos</p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-md text-center">
+                  <p className="text-lg font-bold text-blue-600">{formatCLP(importResult.total_credit)}</p>
+                  <p className="text-xs text-blue-700">Total Ingresos</p>
+                </div>
+                <div className="p-3 bg-red-50 rounded-md text-center">
+                  <p className="text-lg font-bold text-red-600">{formatCLP(importResult.total_debit)}</p>
+                  <p className="text-xs text-red-700">Total Egresos</p>
+                </div>
+              </div>
+              {importResult.errors.length > 0 && (
+                <div className="max-h-32 overflow-y-auto text-xs text-orange-700 bg-orange-50 p-2 rounded-md space-y-1">
+                  {importResult.errors.map((err, i) => (
+                    <p key={i}>{err}</p>
+                  ))}
+                </div>
+              )}
+              <Button onClick={() => setShowImport(false)} className="w-full">Cerrar</Button>
             </div>
           )}
         </DialogContent>

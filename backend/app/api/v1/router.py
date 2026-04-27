@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import alerts, auth, bank, budget_items, companies, dashboard, documents, expenses, exports, fiscal_close, fiscal_years, imports, renditions, users
+from app.api.v1 import alerts, auth, bank, budget_items, companies, dashboard, documents, expenses, exports, fiscal_close, fiscal_years, imports, renditions, reports, users
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -18,3 +18,4 @@ api_router.include_router(companies.router)
 api_router.include_router(bank.router)
 api_router.include_router(renditions.router)
 api_router.include_router(fiscal_close.router)
+api_router.include_router(reports.router)

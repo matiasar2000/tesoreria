@@ -84,7 +84,7 @@ export default function CierrePage() {
       <Header title="Cierre Contable" />
       <div className="p-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Select value={selectedFY} onValueChange={(v: string) => setSelectedFY(v)}>
+          <Select value={selectedFY} onValueChange={(v) => setSelectedFY(v ?? "")}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Seleccionar año fiscal" />
             </SelectTrigger>

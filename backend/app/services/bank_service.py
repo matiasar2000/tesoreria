@@ -1,6 +1,10 @@
+import csv
+import io
 import uuid
+from datetime import date, datetime
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.models.bank_account import BankAccount
@@ -12,6 +16,7 @@ from app.schemas.bank import (
     BankAccountUpdate,
     BankTransactionCreate,
     BankTransactionResponse,
+    ImportStatementResponse,
     ReconcileRequest,
 )
 
@@ -139,3 +144,187 @@ def get_reconciliation_summary(db: Session, bank_account_id: uuid.UUID | None = 
         "pending": pending_count,
         "reconciliation_percentage": round((reconciled_count / total) * 100, 1) if total > 0 else 0,
     }
+
+
+def _parse_money(value) -> float:
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).replace("$", "").replace(".", "").replace(",", ".").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0
+
+
+def _parse_date(value) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if hasattr(value, "date"):
+        return value.date()
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _find_column(headers: list[str], candidates: list[str]) -> int | None:
+    for i, h in enumerate(headers):
+        normalized = h.lower().strip()
+        for c in candidates:
+            if c in normalized:
+                return i
+    return None
+
+
+def _parse_rows(rows: list[list]) -> tuple[list[dict], list[str]]:
+    if not rows or len(rows) < 2:
+        return [], ["Archivo vacío o sin datos."]
+
+    headers = [str(h or "").strip() for h in rows[0]]
+
+    date_col = _find_column(headers, ["fecha", "date"])
+    desc_col = _find_column(headers, ["descripcion", "descripción", "description", "detalle", "glosa"])
+    amount_col = _find_column(headers, ["monto", "amount", "valor"])
+    cargo_col = _find_column(headers, ["cargo", "débito", "debito", "debit"])
+    abono_col = _find_column(headers, ["abono", "crédito", "credito", "credit", "haber"])
+    ref_col = _find_column(headers, ["referencia", "reference", "ref", "n° documento", "numero"])
+
+    if date_col is None:
+        return [], ["No se encontró columna de fecha."]
+    if amount_col is None and cargo_col is None:
+        return [], ["No se encontró columna de monto, cargo o abono."]
+
+    parsed = []
+    errors = []
+
+    for row_idx, row in enumerate(rows[1:], start=2):
+        try:
+            tx_date = _parse_date(row[date_col] if date_col < len(row) else None)
+            if not tx_date:
+                errors.append(f"Fila {row_idx}: fecha inválida")
+                continue
+
+            description = str(row[desc_col]).strip() if desc_col is not None and desc_col < len(row) and row[desc_col] else ""
+            reference = str(row[ref_col]).strip() if ref_col is not None and ref_col < len(row) and row[ref_col] else None
+
+            if amount_col is not None:
+                raw_amount = _parse_money(row[amount_col] if amount_col < len(row) else 0)
+                if raw_amount >= 0:
+                    tx_type = "credit"
+                    amount = raw_amount
+                else:
+                    tx_type = "debit"
+                    amount = abs(raw_amount)
+            else:
+                cargo = _parse_money(row[cargo_col] if cargo_col is not None and cargo_col < len(row) else 0)
+                abono = _parse_money(row[abono_col] if abono_col is not None and abono_col < len(row) else 0)
+                if cargo > 0:
+                    tx_type = "debit"
+                    amount = cargo
+                elif abono > 0:
+                    tx_type = "credit"
+                    amount = abono
+                else:
+                    errors.append(f"Fila {row_idx}: sin monto")
+                    continue
+
+            if amount == 0:
+                errors.append(f"Fila {row_idx}: monto cero")
+                continue
+
+            parsed.append({
+                "transaction_date": tx_date,
+                "description": description,
+                "reference": reference,
+                "amount": amount,
+                "transaction_type": tx_type,
+            })
+        except Exception as e:
+            errors.append(f"Fila {row_idx}: {e}")
+
+    return parsed, errors
+
+
+def _read_csv(content: bytes) -> list[list]:
+    for encoding in ("utf-8", "latin-1", "cp1252"):
+        try:
+            text = content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        return []
+
+    for delimiter in (";", ",", "\t"):
+        reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        rows = [row for row in reader if any(cell.strip() for cell in row)]
+        if rows and len(rows[0]) >= 2:
+            return rows
+    return []
+
+
+def _read_excel(content: bytes) -> list[list]:
+    wb = load_workbook(io.BytesIO(content), read_only=True)
+    ws = wb.active
+    return [list(row) for row in ws.iter_rows(values_only=True)]
+
+
+def import_bank_statement(db: Session, file: UploadFile, bank_account_id: uuid.UUID) -> ImportStatementResponse:
+    account = db.query(BankAccount).filter(BankAccount.id == bank_account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Cuenta bancaria no encontrada.")
+
+    content = file.file.read()
+    filename = (file.filename or "").lower()
+
+    if filename.endswith(".csv") or filename.endswith(".txt"):
+        rows = _read_csv(content)
+    elif filename.endswith(".xlsx") or filename.endswith(".xls"):
+        rows = _read_excel(content)
+    else:
+        raise HTTPException(status_code=400, detail="Formato no soportado. Use CSV o Excel (.xlsx).")
+
+    parsed, errors = _parse_rows(rows)
+
+    total_credit = 0.0
+    total_debit = 0.0
+    imported = 0
+
+    for item in parsed:
+        tx = BankTransaction(
+            bank_account_id=bank_account_id,
+            transaction_date=item["transaction_date"],
+            amount=item["amount"],
+            transaction_type=item["transaction_type"],
+            reference=item["reference"],
+            description=item["description"],
+        )
+        db.add(tx)
+
+        if item["transaction_type"] == "credit":
+            total_credit += item["amount"]
+            account.balance = float(account.balance) + item["amount"]
+        else:
+            total_debit += item["amount"]
+            account.balance = float(account.balance) - item["amount"]
+
+        imported += 1
+
+    db.commit()
+
+    return ImportStatementResponse(
+        imported=imported,
+        skipped=len(errors),
+        errors=errors[:20],
+        total_credit=total_credit,
+        total_debit=total_debit,
+    )
