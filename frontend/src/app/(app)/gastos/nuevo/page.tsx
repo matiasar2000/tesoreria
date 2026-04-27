@@ -24,6 +24,24 @@ const SOURCE_LABELS: Record<string, string> = {
   general: "General",
 };
 
+const ASSET_CATEGORIES = [
+  { value: "vehiculo", label: "VehÃ­culo" },
+  { value: "herramienta", label: "Herramienta" },
+  { value: "uniforme", label: "Uniforme" },
+  { value: "equipamiento", label: "Equipamiento" },
+  { value: "inmueble", label: "Inmueble" },
+  { value: "mobiliario", label: "Mobiliario" },
+  { value: "material_operativo", label: "Material Operativo" },
+  { value: "otro", label: "Otro" },
+];
+
+const ASSET_CONDITIONS = [
+  { value: "bueno", label: "Bueno" },
+  { value: "regular", label: "Regular" },
+  { value: "malo", label: "Malo" },
+  { value: "baja", label: "Baja" },
+];
+
 export default function NuevoGastoPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -50,6 +68,14 @@ export default function NuevoGastoPage() {
     expense_date: new Date().toISOString().split("T")[0],
     authorized_by_superintendent: false,
     notes: "",
+    create_inventory_asset: false,
+    asset_name: "",
+    asset_category: "",
+    asset_description: "",
+    asset_serial_number: "",
+    asset_condition: "bueno",
+    asset_location: "",
+    asset_notes: "",
   });
   const [error, setError] = useState("");
 
@@ -69,6 +95,7 @@ export default function NuevoGastoPage() {
     mutationFn: (data: Record<string, unknown>) => api.post("/expenses", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["budget-items"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       router.push("/gastos");
@@ -89,13 +116,25 @@ export default function NuevoGastoPage() {
       expense_date: form.expense_date,
       authorized_by_superintendent: form.authorized_by_superintendent,
       notes: form.notes || null,
+      create_inventory_asset: form.create_inventory_asset,
+      inventory_asset: form.create_inventory_asset
+        ? {
+            name: form.asset_name,
+            category: form.asset_category,
+            description: form.asset_description || null,
+            serial_number: form.asset_serial_number || null,
+            current_condition: form.asset_condition,
+            location: form.asset_location || null,
+            notes: form.asset_notes || null,
+          }
+        : null,
     });
   };
 
   return (
     <>
       <Header title="Nuevo Gasto" />
-      <div className="p-6 max-w-2xl">
+      <div className="p-6 max-w-4xl">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Registrar Gasto</CardTitle>
@@ -223,6 +262,105 @@ export default function NuevoGastoPage() {
                   Se generará una alerta al Directorio.
                 </p>
               )}
+
+              <div className="space-y-4 rounded-md border p-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="create_inventory_asset"
+                    checked={form.create_inventory_asset}
+                    onChange={(e) => setForm({ ...form, create_inventory_asset: e.target.checked })}
+                    className="rounded"
+                  />
+                  <Label htmlFor="create_inventory_asset" className="text-sm font-normal">
+                    Registrar bien inventariable asociado a este gasto
+                  </Label>
+                </div>
+
+                {form.create_inventory_asset && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Nombre del bien</Label>
+                        <Input
+                          value={form.asset_name}
+                          onChange={(e) => setForm({ ...form, asset_name: e.target.value })}
+                          placeholder="Ej: Radio portÃ¡til VHF"
+                          required={form.create_inventory_asset}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>CategorÃ­a</Label>
+                        <select
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={form.asset_category}
+                          onChange={(e) => setForm({ ...form, asset_category: e.target.value })}
+                          required={form.create_inventory_asset}
+                        >
+                          <option value="">Seleccionar categorÃ­a...</option>
+                          {ASSET_CATEGORIES.map((category) => (
+                            <option key={category.value} value={category.value}>
+                              {category.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>NÃºmero de serie</Label>
+                        <Input
+                          value={form.asset_serial_number}
+                          onChange={(e) => setForm({ ...form, asset_serial_number: e.target.value })}
+                          placeholder="Opcional"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>CondiciÃ³n inicial</Label>
+                        <select
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={form.asset_condition}
+                          onChange={(e) => setForm({ ...form, asset_condition: e.target.value })}
+                        >
+                          {ASSET_CONDITIONS.map((condition) => (
+                            <option key={condition.value} value={condition.value}>
+                              {condition.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>UbicaciÃ³n</Label>
+                      <Input
+                        value={form.asset_location}
+                        onChange={(e) => setForm({ ...form, asset_location: e.target.value })}
+                        placeholder="Ej: Bodega comandancia"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>DescripciÃ³n del bien</Label>
+                      <Textarea
+                        value={form.asset_description}
+                        onChange={(e) => setForm({ ...form, asset_description: e.target.value })}
+                        placeholder="Detalle tÃ©cnico o alcance del bien..."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Notas de inventario</Label>
+                      <Textarea
+                        value={form.asset_notes}
+                        onChange={(e) => setForm({ ...form, asset_notes: e.target.value })}
+                        placeholder="Notas patrimoniales o de custodia..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label>Notas (opcional)</Label>

@@ -144,7 +144,7 @@
 | `supplier_name` | `VARCHAR(255)` | SÍ | Nombre del proveedor |
 | `invoice_number` | `VARCHAR(50)` | SÍ | Número de factura |
 | `expense_date` | `DATE` | NO | Fecha del gasto |
-| `status` | `ENUM` | NO | `draft`, `pending_approval`, `approved`, `rejected`, `paid`, `rendered` |
+| `status` | `VARCHAR(20)` | NO | `draft`, `pending_review`, `pending_approval`, `pending_directorio`, `approved`, `rejected`, `voided` |
 | `requires_quotations` | `BOOLEAN` | NO | `true` si monto > $1.000.000 |
 | `has_reception_act` | `BOOLEAN` | NO | Si tiene Acta de Recepción Conforme |
 | `authorized_by_superintendent` | `BOOLEAN` | NO | Si fue autorizado directamente por el Superintendente |
@@ -152,6 +152,11 @@
 | `notes` | `TEXT` | SÍ | Observaciones |
 | `created_at` | `TIMESTAMPTZ` | NO | |
 | `updated_at` | `TIMESTAMPTZ` | NO | |
+
+**Relaciones patrimoniales:**
+- Un gasto puede tener 0..N bienes de inventario asociados por `assets.acquisition_expense_id`.
+- La asociacion es opcional: servicios, consumos, honorarios y otros egresos no generan inventario.
+- La aprobacion del gasto afecta presupuesto; el registro de inventario afecta control patrimonial.
 
 ### 2.6 `approval_flows` — Flujo de aprobación de gastos
 
@@ -180,6 +185,28 @@
 | `verified` | `BOOLEAN` | NO | Si fue verificado como válido. Default `false` |
 | `verified_by_id` | `UUID` | SÍ | FK → users |
 | `uploaded_at` | `TIMESTAMPTZ` | NO | |
+
+### 2.7.1 `assets` - Inventario de bienes
+
+| Columna | Tipo | Nullable | Descripción |
+|---|---|---|---|
+| `id` | `UUID` | NO | PK |
+| `name` | `VARCHAR(255)` | NO | Nombre del bien |
+| `description` | `TEXT` | SÍ | Detalle del bien |
+| `category` | `VARCHAR(50)` | NO | Ej: vehiculo, herramienta, equipamiento, uniforme, inmueble |
+| `serial_number` | `VARCHAR(100)` | SÍ | Numero de serie o codigo interno |
+| `company_id` | `UUID` | SÍ | FK → companies, si el bien esta asignado a una compania |
+| `acquisition_expense_id` | `UUID` | SÍ | FK → expenses, gasto de adquisicion asociado |
+| `acquisition_date` | `DATE` | SÍ | Fecha de compra o incorporacion |
+| `acquisition_value` | `NUMERIC(15,2)` | SÍ | Valor de adquisicion |
+| `current_condition` | `VARCHAR(20)` | NO | `bueno`, `regular`, `malo`, `baja` |
+| `location` | `VARCHAR(255)` | SÍ | Ubicacion fisica |
+| `is_active` | `BOOLEAN` | NO | Indica si sigue vigente en inventario |
+| `notes` | `TEXT` | SÍ | Observaciones |
+| `created_at` | `TIMESTAMPTZ` | NO | |
+| `updated_at` | `TIMESTAMPTZ` | NO | |
+
+**Regla de integridad:** `acquisition_expense_id` usa `ON DELETE SET NULL` para conservar el bien aunque el gasto asociado deje de existir.
 
 ### 2.8 `bank_accounts` — Cuentas bancarias
 
@@ -323,6 +350,9 @@ CREATE INDEX idx_expenses_status ON expenses(status);
 CREATE INDEX idx_expenses_date ON expenses(expense_date);
 CREATE INDEX idx_expenses_company ON expenses(company_id);
 
+-- Inventario vinculado a gastos
+CREATE INDEX idx_assets_acquisition_expense ON assets(acquisition_expense_id);
+
 -- Partidas por año fiscal
 CREATE INDEX idx_budget_items_fiscal_year ON budget_items(fiscal_year_id);
 
@@ -349,3 +379,7 @@ Al inicializar el sistema se deben cargar:
 3. **3 cuentas bancarias** Banco Itaú (Municipal, Acreencias, Ingresos Propios)
 4. **Configuración del sistema**: IMM vigente ($500.000), límite Superintendente (5 IMM)
 5. **Usuario administrador** inicial (Tesorero General)
+
+Datos demo operativos adicionales:
+- `python -m seeds.seed_demo_modules` carga datos para Gastos, Ingresos, Inventario, Banco y Rendiciones.
+- Algunos bienes demo quedan asociados a gastos reales de adquisicion para probar la trazabilidad gasto-inventario.

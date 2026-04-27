@@ -29,7 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatCLP, formatDate } from "@/lib/utils";
-import { Ban, ChevronRight, Download, Eye, Paperclip, Plus, Trash2, Upload, X } from "lucide-react";
+import { Ban, ChevronRight, Download, Eye, Package, Paperclip, Plus, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -169,6 +169,7 @@ export default function GastosPage() {
     mutationFn: (id: string) => api.patch(`/expenses/${id}/advance`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["budget-items"] });
     },
@@ -178,6 +179,7 @@ export default function GastosPage() {
     mutationFn: (id: string) => api.patch(`/expenses/${id}/reject`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
     },
   });
 
@@ -185,6 +187,7 @@ export default function GastosPage() {
     mutationFn: (id: string) => api.patch(`/expenses/${id}/void`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["budget-items"] });
     },
@@ -339,6 +342,7 @@ export default function GastosPage() {
                       <TableHead>Proveedor</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Inventario</TableHead>
                       <TableHead>Flujo</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
@@ -346,7 +350,7 @@ export default function GastosPage() {
                   <TableBody>
                     {data?.items.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           No hay gastos registrados.
                         </TableCell>
                       </TableRow>
@@ -362,6 +366,16 @@ export default function GastosPage() {
                           <TableCell className="text-right font-mono font-medium">{formatCLP(expense.amount)}</TableCell>
                           <TableCell>
                             <Badge variant={st.variant}>{st.label}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {expense.inventory_assets.length > 0 ? (
+                              <Badge variant="outline" className="gap-1">
+                                <Package className="h-3 w-3" />
+                                {expense.inventory_assets.length}
+                              </Badge>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <ApprovalFlow steps={expense.approval_steps} />
@@ -528,7 +542,7 @@ export default function GastosPage() {
       </Dialog>
 
       <Dialog open={!!detailExpense} onOpenChange={() => setDetailExpense(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Detalle del Gasto</DialogTitle>
           </DialogHeader>
@@ -589,6 +603,32 @@ export default function GastosPage() {
                     <p className="text-xs text-muted-foreground">Sin flujo de aprobacion (gasto anterior al sistema multi-paso)</p>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Bienes vinculados</p>
+                {detailExpense.inventory_assets.length === 0 ? (
+                  <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                    Este gasto no tiene bienes de inventario asociados.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {detailExpense.inventory_assets.map((asset) => (
+                      <div key={asset.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                        <div>
+                          <p className="font-medium">{asset.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {asset.category}
+                            {asset.serial_number ? ` - Serie ${asset.serial_number}` : ""}
+                          </p>
+                        </div>
+                        <Badge variant={asset.is_active ? "default" : "secondary"}>
+                          {asset.current_condition}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {detailExpense.notes && (

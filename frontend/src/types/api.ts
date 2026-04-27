@@ -69,6 +69,16 @@ export interface Expense {
   budget_item_name: string | null;
   requested_by_name: string | null;
   approval_steps: ApprovalStep[];
+  inventory_assets: ExpenseInventoryAsset[];
+}
+
+export interface ExpenseInventoryAsset {
+  id: string;
+  name: string;
+  category: string;
+  serial_number: string | null;
+  current_condition: string;
+  is_active: boolean;
 }
 
 export interface Income {
@@ -149,6 +159,9 @@ export interface Asset {
   serial_number: string | null;
   company_id: string | null;
   company_name: string | null;
+  acquisition_expense_id: string | null;
+  acquisition_expense_description: string | null;
+  acquisition_expense_status: string | null;
   acquisition_date: string | null;
   acquisition_value: number | null;
   current_condition: string;

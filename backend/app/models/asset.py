@@ -17,6 +17,11 @@ class Asset(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
+    acquisition_expense_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("expenses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     acquisition_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     acquisition_value: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     current_condition: Mapped[str] = mapped_column(String(20), nullable=False, default="bueno")
@@ -27,3 +32,4 @@ class Asset(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     company = relationship("Company", lazy="selectin")
+    acquisition_expense = relationship("Expense", back_populates="inventory_assets", lazy="selectin")

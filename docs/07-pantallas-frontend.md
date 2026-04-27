@@ -19,6 +19,7 @@ Login
     ├── Compañías (/companias)
     │   └── Cierre compañía (/companias/[id])
     ├── Deudas (/deudas)
+    ├── Inventario (/inventario)
     ├── Rendiciones (/rendiciones)
     │   └── Detalle rendición (/rendiciones/[id])
     ├── Alertas (/alertas)
@@ -39,6 +40,7 @@ Login
 | Bancos | CRUD + Import | — | Solo lectura | — | — |
 | Compañías (cierre) | Gestionar | — | Gestionar | Su compañía | — |
 | Deudas | CRUD | Solo lectura | Solo lectura | — | Resumen |
+| Inventario | CRUD | Solo lectura | Solo lectura | Solo lectura (su cía) | Solo lectura |
 | Rendiciones | CRUD | — | Solo lectura | — | — |
 | Alertas | Todas | Las suyas | Las suyas | Las suyas | Las suyas |
 | Importar | Sí | — | — | — | — |
@@ -129,9 +131,11 @@ Tabla de 45 partidas:
 
 ### 3.5 Gastos (`/gastos`)
 - Tabla de gastos con filtros: estado, partida, fecha, proveedor, compañía, monto
-- Columnas: fecha, descripción, proveedor, monto, partida, estado, respaldos (iconos)
-- Badge de estado con color: draft (gris), pendiente (amarillo), aprobado (verde), rechazado (rojo), pagado (azul)
+- Columnas: fecha, descripción, proveedor, monto, partida, estado, inventario, respaldos (iconos)
+- Badge de estado con color: draft (gris), pending_review/pending_approval/pending_directorio (amarillo), approved (verde), rejected (rojo), voided (gris)
 - Indicador de respaldos: iconos para factura, acta, cotizaciones (check verde / X rojo)
+- Indicador de inventario: muestra si el gasto tiene bienes asociados y cuántos son
+- El detalle del gasto muestra la lista de bienes asociados con categoría, serie y condición
 - Botón "Nuevo gasto"
 
 ### 3.6 Nuevo Gasto (`/gastos/nuevo`)
@@ -144,6 +148,8 @@ Formulario:
 - Número de factura
 - Compañía asociada (opcional, select)
 - Autorizado por Superintendente (checkbox, muestra alerta si > 5 IMM)
+- Registrar bien inventariable asociado (checkbox)
+- Datos del bien inventariable cuando aplica: nombre, categoria, condicion, numero de serie, ubicacion y notas
 - Subida de documentos (drag & drop, múltiple)
 - Validaciones en tiempo real:
   - Alerta si monto > saldo disponible
@@ -153,6 +159,7 @@ Formulario:
 ### 3.7 Detalle de Gasto (`/gastos/[id]`)
 - Información completa del gasto
 - Timeline de aprobación (pasos completados y pendientes)
+- Bienes de inventario asociados, si existen
 - Lista de documentos adjuntos con preview y descarga
 - Botones de acción según estado y rol: aprobar, rechazar, editar, eliminar
 
@@ -193,6 +200,13 @@ Cada cuadrado = un tipo de documento (egresos, traspasos, ingresos, cartolas, co
 - Tabla con: acreedor/deudor, monto total, monto pagado, saldo, vencimiento, estado
 - Cards de resumen: total por pagar, total por cobrar, vencidas
 - Botón de registrar pago parcial/total
+
+### 3.12.1 Inventario (`/inventario`)
+- Tabla de bienes con filtros por categoria y condicion
+- Columnas: bien, categoria, compania, origen, adquisicion, condicion, ubicacion
+- Resumen superior: total de bienes, valor total, activos y dados de baja
+- Dialog de crear/editar bien con selector opcional de gasto de adquisicion
+- Si el bien esta asociado a un gasto, la columna Origen muestra descripcion y estado del gasto
 
 ### 3.13 Rendiciones (`/rendiciones`)
 - Lista de rendiciones con estado y plazo

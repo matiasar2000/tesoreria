@@ -18,6 +18,7 @@ Cada módulo del catálogo original se implementa como combinación de endpoints
 | **A8.** Dashboard financiero | `dashboard_service`, `dashboard` API | `/dashboard` (panel principal) | **1** |
 | **A9.** Flujo aprobación de gastos | `approval_service`, `approvals` API | `/aprobaciones`, flujo en `/gastos/{id}` | **2** |
 | **A10.** Registro deudas y acreencias | `debt_service`, `debts` API | `/deudas` | **2** |
+| **A11.** Inventario patrimonial | `asset_service`, `assets` API, vinculo `assets.acquisition_expense_id` | `/inventario`, opcion en `/gastos/nuevo` | **2** |
 
 ### Parte B: Inteligencia Artificial (Fase 4+)
 
@@ -71,6 +72,7 @@ Cada módulo del catálogo original se implementa como combinación de endpoints
 - **A7: Seguimiento cierre por compañía** — tablero visual, recordatorios
 - **A9: Flujo de aprobación de gastos** — circuito digital según monto
 - **A10: Registro de deudas y acreencias** — control de obligaciones
+- **A11: Inventario patrimonial** — bienes institucionales y trazabilidad opcional al gasto de adquisicion
 - Gestión de cuentas bancarias y movimientos
 - Portal de Director de Compañía (vista limitada)
 - Registro de auditoría

@@ -77,7 +77,7 @@ Al hacer clic en una partida se accede a su detalle con el desglose de gastos as
 
 ### 4. Gestion de gastos
 
-Registro, aprobacion, rechazo y anulacion de gastos. Cada gasto se vincula a una partida presupuestaria y pasa por un flujo de aprobacion:
+Registro, aprobacion, rechazo y anulacion de gastos. Cada gasto se vincula a una partida presupuestaria y pasa por un flujo de aprobacion. Opcionalmente, al crear un gasto se puede registrar un bien inventariable asociado cuando la compra corresponde a un activo patrimonial:
 
 **Flujo:** Pendiente de aprobacion → Aprobado / Rechazado → (opcionalmente) Anulado
 
@@ -86,13 +86,15 @@ Cuando se aprueba un gasto, el monto se descuenta automaticamente de la partida.
 | Pantalla | Direccion web | Que hace |
 |----------|---------------|----------|
 | Lista de gastos | `/gastos` | Tabla de gastos con filtros por estado y botones de accion |
-| Nuevo gasto | `/gastos/nuevo` | Formulario para registrar un gasto |
+| Nuevo gasto | `/gastos/nuevo` | Formulario para registrar un gasto y, si aplica, crear un bien de inventario asociado |
 
 **Archivos relacionados:**
 - `frontend/src/app/(app)/gastos/page.tsx` — Lista de gastos con acciones (aprobar, rechazar, anular)
 - `frontend/src/app/(app)/gastos/nuevo/page.tsx` — Formulario de nuevo gasto
 - `backend/app/api/v1/expenses.py` — Endpoints de gastos (CRUD + aprobar/rechazar/anular)
 - `backend/app/services/expense_service.py` — Logica de negocio: validaciones, descuento de presupuesto, alertas
+- `backend/app/models/expense.py` — Relacion con bienes asociados por adquisicion
+- `backend/app/schemas/expense.py` — Payload opcional `create_inventory_asset` y respuesta `inventory_assets`
 
 ---
 
@@ -167,6 +169,10 @@ Al ejecutar los seeds, el sistema se carga con datos reales del CBT para el año
 - **Configuracion:** IMM = $500.000, limite superintendente = 5 IMM
 
 **Archivo:** `backend/seeds/run_seeds.py`
+
+Datos demo operativos adicionales:
+- `backend/seeds/seed_demo_modules.py` carga ejemplos de Gastos, Ingresos, Inventario, Banco y Rendiciones.
+- El seed operativo vincula algunos bienes de inventario a gastos de adquisicion para probar la trazabilidad gasto-inventario.
 
 ---
 
@@ -346,9 +352,11 @@ Pagina dedicada con graficos interactivos y balances financieros formales segun 
 
 Libro de Inventario General del CBT (Art. 27-28). Registro de todos los bienes: vehiculos, herramientas, uniformes, equipamiento, inmuebles, mobiliario y material operativo. Custodiado por la Tesoreria General.
 
+Los bienes pueden quedar asociados a un gasto de adquisicion mediante `acquisition_expense_id`, pero la asociacion es opcional. Esto permite cubrir compras inventariables desde gastos y tambien bienes que ingresan por donacion, alta historica, traspaso o regularizacion.
+
 | Pantalla | Direccion web | Que hace |
 |----------|---------------|----------|
-| Inventario | `/inventario` | CRUD de bienes con filtros por categoria y condicion |
+| Inventario | `/inventario` | CRUD de bienes con filtros por categoria y condicion, y origen por gasto cuando aplica |
 
 **Archivos relacionados:**
 - `frontend/src/app/(app)/inventario/page.tsx` — Tabla de bienes con filtros, crear/editar, resumen
@@ -356,6 +364,7 @@ Libro de Inventario General del CBT (Art. 27-28). Registro de todos los bienes: 
 - `backend/app/services/asset_service.py` — Logica de bienes
 - `backend/app/models/asset.py` — Modelo de bien institucional
 - `backend/app/schemas/asset.py` — Schemas de bien
+- `backend/alembic/versions/f2b8c6d1a905_link_assets_to_expenses.py` — Migracion que agrega el vinculo opcional con gastos
 
 ---
 

@@ -10,6 +10,7 @@ class AssetCreate(BaseModel):
     description: str | None = None
     serial_number: str | None = None
     company_id: uuid.UUID | None = None
+    acquisition_expense_id: uuid.UUID | None = None
     acquisition_date: date | None = None
     acquisition_value: float | None = None
     current_condition: str | None = None
@@ -24,6 +25,7 @@ class AssetUpdate(BaseModel):
     category: str | None = None
     serial_number: str | None = None
     company_id: uuid.UUID | None = None
+    acquisition_expense_id: uuid.UUID | None = None
     acquisition_date: date | None = None
     acquisition_value: float | None = None
     current_condition: str | None = None
@@ -39,6 +41,7 @@ class AssetResponse(BaseModel):
     category: str
     serial_number: str | None
     company_id: uuid.UUID | None
+    acquisition_expense_id: uuid.UUID | None
     acquisition_date: date | None
     acquisition_value: float | None
     current_condition: str
@@ -48,5 +51,7 @@ class AssetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     company_name: str | None = None
+    acquisition_expense_description: str | None = None
+    acquisition_expense_status: str | None = None
 
     model_config = {"from_attributes": True}

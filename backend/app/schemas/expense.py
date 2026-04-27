@@ -4,6 +4,16 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 
+class ExpenseInventoryAssetCreate(BaseModel):
+    name: str
+    category: str
+    description: str | None = None
+    serial_number: str | None = None
+    current_condition: str = "bueno"
+    location: str | None = None
+    notes: str | None = None
+
+
 class ExpenseCreate(BaseModel):
     budget_item_id: uuid.UUID
     amount: float
@@ -15,6 +25,8 @@ class ExpenseCreate(BaseModel):
     company_id: uuid.UUID | None = None
     authorized_by_superintendent: bool = False
     notes: str | None = None
+    create_inventory_asset: bool = False
+    inventory_asset: ExpenseInventoryAssetCreate | None = None
 
 
 class ExpenseUpdate(BaseModel):
@@ -36,6 +48,15 @@ class ApprovalStepBrief(BaseModel):
     status: str
     acted_by_name: str | None = None
     acted_at: datetime | None = None
+
+
+class ExpenseInventoryAssetBrief(BaseModel):
+    id: uuid.UUID
+    name: str
+    category: str
+    serial_number: str | None = None
+    current_condition: str
+    is_active: bool
 
 
 class ExpenseResponse(BaseModel):
@@ -61,5 +82,6 @@ class ExpenseResponse(BaseModel):
     budget_item_name: str | None = None
     requested_by_name: str | None = None
     approval_steps: list[ApprovalStepBrief] = []
+    inventory_assets: list[ExpenseInventoryAssetBrief] = []
 
     model_config = {"from_attributes": True}

@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
+from app.models.expense import Expense
 from app.schemas.asset import AssetCreate, AssetResponse, AssetUpdate
 
 
@@ -45,6 +46,7 @@ def _to_response(asset: Asset) -> AssetResponse:
         category=asset.category,
         serial_number=asset.serial_number,
         company_id=asset.company_id,
+        acquisition_expense_id=asset.acquisition_expense_id,
         acquisition_date=asset.acquisition_date,
         acquisition_value=float(asset.acquisition_value) if asset.acquisition_value is not None else None,
         current_condition=asset.current_condition,
@@ -54,12 +56,23 @@ def _to_response(asset: Asset) -> AssetResponse:
         created_at=asset.created_at,
         updated_at=asset.updated_at,
         company_name=asset.company.name if asset.company else None,
+        acquisition_expense_description=asset.acquisition_expense.description if asset.acquisition_expense else None,
+        acquisition_expense_status=asset.acquisition_expense.status if asset.acquisition_expense else None,
     )
+
+
+def _validate_acquisition_expense(db: Session, expense_id: uuid.UUID | None) -> None:
+    if expense_id is None:
+        return
+    exists = db.query(Expense.id).filter(Expense.id == expense_id).first()
+    if not exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gasto de adquisicion no encontrado.")
 
 
 def create_asset(db: Session, data: AssetCreate) -> AssetResponse:
     _validate_category(data.category)
     _validate_condition(data.current_condition)
+    _validate_acquisition_expense(db, data.acquisition_expense_id)
     asset = Asset(**data.model_dump(exclude_none=True))
     db.add(asset)
     db.commit()
@@ -104,6 +117,8 @@ def update_asset(db: Session, asset_id: uuid.UUID, data: AssetUpdate) -> AssetRe
     _validate_non_nullable_updates(update_data)
     _validate_category(update_data.get("category"))
     _validate_condition(update_data.get("current_condition"))
+    if "acquisition_expense_id" in update_data:
+        _validate_acquisition_expense(db, update_data["acquisition_expense_id"])
     for field, value in update_data.items():
         setattr(asset, field, value)
     db.commit()

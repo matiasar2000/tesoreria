@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactElement } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import type { Asset, AssetSummary, Company } from "@/types/api";
+import type { Asset, AssetSummary, Company, Expense, PaginatedResponse } from "@/types/api";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -59,6 +59,7 @@ interface AssetFormState {
   category: AssetCategory | "";
   serial_number: string;
   company_id: string;
+  acquisition_expense_id: string;
   acquisition_date: string;
   acquisition_value: string;
   current_condition: AssetCondition;
@@ -73,6 +74,7 @@ interface AssetPayload {
   category: AssetCategory;
   serial_number: string | null;
   company_id: string | null;
+  acquisition_expense_id: string | null;
   acquisition_date: string | null;
   acquisition_value: number | null;
   current_condition: AssetCondition;
@@ -124,6 +126,7 @@ const CONDITION_BADGE_CLASSES: Record<AssetCondition, string> = {
 const ALL_CATEGORIES_VALUE = "__todas__";
 const ALL_CONDITIONS_VALUE = "__todas_las_condiciones__";
 const COMPANY_NONE_VALUE = "__sin_compania__";
+const EXPENSE_NONE_VALUE = "__sin_gasto__";
 
 function getEmptyForm(): AssetFormState {
   return {
@@ -132,6 +135,7 @@ function getEmptyForm(): AssetFormState {
     category: "",
     serial_number: "",
     company_id: "",
+    acquisition_expense_id: "",
     acquisition_date: "",
     acquisition_value: "",
     current_condition: "bueno",
@@ -178,6 +182,7 @@ function buildPayload(form: AssetFormState): AssetPayload {
     category: form.category as AssetCategory,
     serial_number: serialNumber || null,
     company_id: form.company_id || null,
+    acquisition_expense_id: form.acquisition_expense_id || null,
     acquisition_date: form.acquisition_date || null,
     acquisition_value: value ? Number(value) : null,
     current_condition: form.current_condition,
@@ -221,11 +226,17 @@ export default function InventarioPage(): ReactElement {
     queryFn: () => api.get<Company[]>("/companies"),
   });
 
+  const { data: expenseOptions, isLoading: expensesLoading } = useQuery<PaginatedResponse<Expense>, Error>({
+    queryKey: ["expenses", "asset-link-options"],
+    queryFn: () => api.get<PaginatedResponse<Expense>>("/expenses?page_size=100"),
+  });
+
   const createAsset = useMutation({
     mutationFn: (data: AssetPayload) => api.post<Asset>("/assets", data),
     onSuccess: () => {
       closeDialog();
       queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
     },
     onError: (err: Error) => setFormError(err.message),
   });
@@ -235,12 +246,14 @@ export default function InventarioPage(): ReactElement {
     onSuccess: () => {
       closeDialog();
       queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
     },
     onError: (err: Error) => setFormError(err.message),
   });
 
   const assetList = assets ?? [];
   const companyList = companies ?? [];
+  const expenseList = expenseOptions?.items ?? [];
   const isEditing = editingAsset !== null;
   const isSaving = createAsset.isPending || updateAsset.isPending;
   const totalAssets = summary?.total_assets ?? 0;
@@ -281,6 +294,7 @@ export default function InventarioPage(): ReactElement {
       category: asset.category as AssetCategory,
       serial_number: asset.serial_number ?? "",
       company_id: asset.company_id ?? "",
+      acquisition_expense_id: asset.acquisition_expense_id ?? "",
       acquisition_date: asset.acquisition_date ?? "",
       acquisition_value: asset.acquisition_value?.toString() ?? "",
       current_condition: asset.current_condition as AssetCondition,
@@ -470,6 +484,7 @@ export default function InventarioPage(): ReactElement {
                       <TableHead>Categoría</TableHead>
                       <TableHead>Compañía</TableHead>
                       <TableHead>Condición</TableHead>
+                      <TableHead>Origen</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -478,7 +493,7 @@ export default function InventarioPage(): ReactElement {
                   <TableBody>
                     {assetList.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           No hay bienes registrados.
                         </TableCell>
                       </TableRow>
@@ -506,6 +521,9 @@ export default function InventarioPage(): ReactElement {
                           >
                             {getConditionLabel(asset.current_condition)}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-48 truncate text-sm">
+                          {asset.acquisition_expense_description ?? "Sin gasto asociado"}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           {asset.acquisition_value !== null ? formatCLP(asset.acquisition_value) : "-"}
@@ -657,6 +675,42 @@ export default function InventarioPage(): ReactElement {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Gasto de adquisicion</Label>
+              <Select
+                value={form.acquisition_expense_id || EXPENSE_NONE_VALUE}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Base UI Select requiere value amplio en este wrapper.
+                onValueChange={(v: any) => {
+                  if (v === EXPENSE_NONE_VALUE || v === null) {
+                    setForm({ ...form, acquisition_expense_id: "" });
+                    return;
+                  }
+
+                  const selectedExpense = expenseList.find((expense) => expense.id === v);
+                  setForm({
+                    ...form,
+                    acquisition_expense_id: v,
+                    company_id: form.company_id || selectedExpense?.company_id || "",
+                    acquisition_date: form.acquisition_date || selectedExpense?.expense_date || "",
+                    acquisition_value: form.acquisition_value || selectedExpense?.amount.toString() || "",
+                  });
+                }}
+                disabled={expensesLoading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={expensesLoading ? "Cargando gastos..." : "Sin gasto asociado"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={EXPENSE_NONE_VALUE}>Sin gasto asociado</SelectItem>
+                  {expenseList.map((expense) => (
+                    <SelectItem key={expense.id} value={expense.id}>
+                      {expense.description} - {formatCLP(expense.amount)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

@@ -60,6 +60,24 @@ Este documento describe las reglas de negocio que el sistema debe implementar, d
 - No se puede aprobar un gasto si `expense.amount > budget_item.available_amount`
 - Error: `INSUFFICIENT_BUDGET`
 
+### RN-010A: Relacion opcional entre gastos e inventario
+- Un gasto puede registrar un bien inventariable al momento de crearse mediante `create_inventory_asset = true`.
+- La relacion no es obligatoria: gastos de servicios, consumo, honorarios, mantenciones u otros egresos pueden no generar bienes.
+- Un bien de inventario tambien puede existir sin gasto asociado, por ejemplo por donacion, alta historica, traspaso, regularizacion o carga inicial.
+- El vinculo se guarda en `assets.acquisition_expense_id`; la respuesta del gasto expone `inventory_assets`.
+
+### RN-010B: Creacion de bien desde gasto
+- Si `create_inventory_asset = true`, el payload debe incluir `inventory_asset`.
+- El bien hereda desde el gasto: `company_id`, `acquisition_date`, `acquisition_value` y `acquisition_expense_id`.
+- El backend valida categoria y condicion del bien antes de guardar.
+- Crear el bien no aprueba el gasto ni ejecuta presupuesto por si mismo; el presupuesto se afecta cuando el gasto queda `approved`.
+
+### RN-010C: Efecto de acciones de gasto sobre inventario
+- Rechazar un gasto pendiente marca sus bienes asociados como inactivos y condicion `baja`.
+- Anular un gasto marca sus bienes asociados como inactivos y condicion `baja`; si el gasto estaba aprobado, tambien revierte el monto ejecutado del presupuesto.
+- Eliminar un gasto marca sus bienes asociados como inactivos y condicion `baja`; si estaba aprobado, tambien revierte el presupuesto.
+- Los bienes no se borran automaticamente, para conservar trazabilidad patrimonial.
+
 ## 3. Cuentas Bancarias y Conciliación
 
 ### RN-011: Conciliación bancaria

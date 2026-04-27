@@ -62,17 +62,15 @@ Base URL: `/api/v1`
 
 | Método | Ruta | Descripción | Roles |
 |---|---|---|---|
-| `GET` | `/expenses` | Listar gastos (filtros: partida, estado, fecha, compañía, proveedor) | Autenticado |
-| `POST` | `/expenses` | Registrar nuevo gasto | tesorero, equipo_tesoreria |
-| `GET` | `/expenses/{id}` | Detalle de gasto con documentos y flujo de aprobación | Autenticado |
+| `GET` | `/expenses` | Listar gastos paginados (filtros: año fiscal, partida, estado) | Autenticado |
+| `POST` | `/expenses` | Registrar nuevo gasto; opcionalmente crear bien de inventario asociado | tesorero, equipo_tesoreria |
+| `GET` | `/expenses/{id}` | Detalle de gasto con documentos, flujo de aprobación e inventario asociado | Autenticado |
 | `PUT` | `/expenses/{id}` | Actualizar gasto (solo si está en draft) | tesorero, equipo_tesoreria |
-| `DELETE` | `/expenses/{id}` | Eliminar gasto (solo si está en draft) | tesorero |
-| `POST` | `/expenses/{id}/submit` | Enviar a aprobación | tesorero, equipo_tesoreria |
-| `POST` | `/expenses/{id}/approve` | Aprobar gasto | tesorero, superintendente |
-| `POST` | `/expenses/{id}/reject` | Rechazar gasto | tesorero, superintendente |
-| `POST` | `/expenses/{id}/mark-paid` | Marcar como pagado | tesorero |
-| `GET` | `/expenses/by-supplier` | Gastos agrupados por proveedor | tesorero, equipo_tesoreria |
-| `GET` | `/expenses/by-month` | Gastos agrupados por mes | Autenticado |
+| `DELETE` | `/expenses/{id}` | Eliminar gasto; revierte presupuesto si estaba aprobado y da de baja bienes asociados | tesorero |
+| `PATCH` | `/expenses/{id}/advance` | Aprobar el paso pendiente del flujo | Rol requerido por el paso |
+| `PATCH` | `/expenses/{id}/approve` | Alias de avance/aprobación del paso pendiente | Rol requerido por el paso |
+| `PATCH` | `/expenses/{id}/reject` | Rechazar gasto pendiente y dar de baja bienes asociados | Rol requerido por el paso |
+| `PATCH` | `/expenses/{id}/void` | Anular gasto; revierte presupuesto si estaba aprobado y da de baja bienes asociados | tesorero |
 
 ### Reglas de negocio al crear/aprobar gastos:
 
@@ -81,6 +79,28 @@ Base URL: `/api/v1`
 3. Si `amount > 1.000.000` → `requires_quotations = true`, debe tener 3 documentos tipo `quotation`
 4. Si `authorized_by_superintendent = true` y `amount > IMM * 5` → **alerta automática** a directorio
 5. Al aprobar → `budget_items.executed_amount += expense.amount`
+6. Si `create_inventory_asset = true`, se debe enviar `inventory_asset`; el backend crea un bien asociado al gasto.
+7. Al rechazar, anular o eliminar un gasto con bienes asociados, esos bienes quedan inactivos y con condición `baja`.
+
+**Payload opcional para crear inventario desde un gasto:**
+```json
+{
+  "budget_item_id": "uuid",
+  "amount": 1780000,
+  "description": "Adquisicion mangueras forestales",
+  "expense_date": "2026-02-20",
+  "create_inventory_asset": true,
+  "inventory_asset": {
+    "name": "Mangueras forestales 45mm",
+    "category": "material_operativo",
+    "serial_number": "MNG-FOR-045",
+    "current_condition": "bueno",
+    "location": "Bodega Sexta Compania"
+  }
+}
+```
+
+La respuesta de gastos incluye `inventory_assets` con los bienes vinculados.
 
 ## 6. Documentos de Respaldo
 
@@ -151,6 +171,23 @@ Base URL: `/api/v1`
 | `POST` | `/renditions/{id}/submit` | Marcar como presentada | tesorero |
 | `GET` | `/renditions/{id}/export` | Exportar rendición en formato SIRC | tesorero |
 
+## 12.1 Inventario de Bienes
+
+| Método | Ruta | Descripción | Roles |
+|---|---|---|---|
+| `GET` | `/assets` | Listar bienes activos (filtros: categoria, compañia, condicion) | Autenticado |
+| `GET` | `/assets/summary` | Resumen de inventario: total, valor, activos, bajas y categorias | Autenticado |
+| `POST` | `/assets` | Crear bien; puede asociarse a `acquisition_expense_id` | tesorero |
+| `GET` | `/assets/{id}` | Detalle de un bien | Autenticado |
+| `PUT` | `/assets/{id}` | Actualizar bien, incluida su asociacion opcional a gasto | tesorero |
+
+**Campos de relacion con gastos:**
+- `acquisition_expense_id`: gasto de adquisicion asociado. Es opcional.
+- `acquisition_expense_description`: descripcion del gasto asociado en la respuesta.
+- `acquisition_expense_status`: estado actual del gasto asociado en la respuesta.
+
+Si se informa `acquisition_expense_id`, el backend valida que el gasto exista.
+
 ## 13. Alertas y Notificaciones
 
 | Método | Ruta | Descripción | Roles |
@@ -220,12 +257,13 @@ GET /expenses?page=1&page_size=20
 ### Filtros
 Los filtros se pasan como query parameters:
 ```
-GET /expenses?status=approved&budget_item_id=uuid&from_date=2026-01-01&to_date=2026-03-31
+GET /expenses?status=approved&budget_item_id=uuid&fiscal_year_id=uuid
 ```
 
 ### Ordenamiento
+El listado de gastos se entrega ordenado por `expense_date` descendente desde backend. Cuando otro endpoint soporte ordenamiento explicito, se usa este formato:
 ```
-GET /expenses?sort_by=expense_date&sort_order=desc
+GET /endpoint?sort_by=created_at&sort_order=desc
 ```
 
 ### Errores

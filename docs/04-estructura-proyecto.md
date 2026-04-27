@@ -28,6 +28,7 @@ tesoreria-cbt/
 │   │   │       ├── fiscal_years.py
 │   │   │       ├── budget_items.py
 │   │   │       ├── expenses.py
+│   │   │       ├── assets.py
 │   │   │       ├── documents.py
 │   │   │       ├── approvals.py
 │   │   │       ├── bank_accounts.py
@@ -50,6 +51,7 @@ tesoreria-cbt/
 │   │   │   ├── fiscal_year.py
 │   │   │   ├── budget_item.py
 │   │   │   ├── expense.py
+│   │   │   ├── asset.py
 │   │   │   ├── document.py
 │   │   │   ├── approval_flow.py
 │   │   │   ├── bank_account.py
@@ -68,6 +70,7 @@ tesoreria-cbt/
 │   │   │   ├── fiscal_year.py
 │   │   │   ├── budget_item.py      # Incluye campos calculados (available, %, color)
 │   │   │   ├── expense.py
+│   │   │   ├── asset.py
 │   │   │   ├── document.py
 │   │   │   ├── approval.py
 │   │   │   ├── bank.py
@@ -86,6 +89,7 @@ tesoreria-cbt/
 │   │   │   ├── user_service.py
 │   │   │   ├── budget_service.py   # Lógica de semáforo, bloqueo, ejecución
 │   │   │   ├── expense_service.py  # Validaciones de gasto, reglas de negocio
+│   │   │   ├── asset_service.py    # Inventario y vínculo opcional con gastos
 │   │   │   ├── approval_service.py # Lógica de flujo de aprobación
 │   │   │   ├── bank_service.py     # Conciliación bancaria
 │   │   │   ├── closing_service.py  # Seguimiento de cierre por compañía
@@ -132,6 +136,7 @@ tesoreria-cbt/
 │   │   ├── seed_budget_2026.py     # 45 ítems con montos
 │   │   ├── seed_bank_accounts.py   # 3 cuentas Itaú
 │   │   ├── seed_config.py          # IMM, límite Superintendente
+│   │   ├── seed_demo_modules.py    # Datos demo de gastos, ingresos, inventario, banco y rendiciones
 │   │   └── run_seeds.py            # Script principal de carga inicial
 │   │
 │   ├── tests/
@@ -181,6 +186,8 @@ tesoreria-cbt/
 │   │   │   │       └── page.tsx        # Estado de cierre de una compañía
 │   │   │   ├── deudas/
 │   │   │   │   └── page.tsx            # Deudas y acreencias
+│   │   │   ├── inventario/
+│   │   │   │   └── page.tsx            # Inventario de bienes con origen por gasto
 │   │   │   ├── rendiciones/
 │   │   │   │   ├── page.tsx            # Listado de rendiciones
 │   │   │   │   └── [id]/

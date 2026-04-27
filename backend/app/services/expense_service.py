@@ -9,11 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BudgetItemBlocked, InsufficientBudget
 from app.models.approval_step import ApprovalStep
+from app.models.asset import Asset
 from app.models.expense import Expense
 from app.models.fiscal_year import FiscalYear
 from app.models.user import User
-from app.schemas.expense import ApprovalStepBrief, ExpenseCreate, ExpenseResponse, ExpenseUpdate
+from app.schemas.expense import (
+    ApprovalStepBrief,
+    ExpenseCreate,
+    ExpenseInventoryAssetBrief,
+    ExpenseResponse,
+    ExpenseUpdate,
+)
 from app.services import alert_service, budget_service
+from app.services.asset_service import VALID_CATEGORIES, VALID_CONDITIONS
 from app.services.fund_validation import validate_fund_usage
 
 
@@ -38,11 +46,23 @@ def _step_brief(step: ApprovalStep) -> ApprovalStepBrief:
     )
 
 
+def _asset_brief(asset: Asset) -> ExpenseInventoryAssetBrief:
+    return ExpenseInventoryAssetBrief(
+        id=asset.id,
+        name=asset.name,
+        category=asset.category,
+        serial_number=asset.serial_number,
+        current_condition=asset.current_condition,
+        is_active=asset.is_active,
+    )
+
+
 def _to_response(expense: Expense) -> ExpenseResponse:
     data = {c.name: getattr(expense, c.name) for c in expense.__table__.columns}
     data["budget_item_name"] = expense.budget_item.name if expense.budget_item else None
     data["requested_by_name"] = expense.requested_by.full_name if expense.requested_by else None
     data["approval_steps"] = [_step_brief(s) for s in expense.approval_steps]
+    data["inventory_assets"] = [_asset_brief(a) for a in expense.inventory_assets]
     return ExpenseResponse(**data)
 
 
@@ -87,6 +107,56 @@ def _build_approval_steps(db: Session, expense: Expense) -> None:
     db.flush()
 
 
+def _create_inventory_asset(db: Session, expense: Expense, data: ExpenseCreate) -> None:
+    if not data.create_inventory_asset:
+        return
+    if not data.inventory_asset:
+        raise HTTPException(status_code=400, detail="Debe informar los datos del bien inventariable.")
+
+    asset_data = data.inventory_asset
+    name = asset_data.name.strip()
+    category = asset_data.category.strip()
+    current_condition = asset_data.current_condition.strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="El nombre del bien inventariable es obligatorio.")
+    if category not in VALID_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Categoria de bien inventariable invalida.")
+    if current_condition not in VALID_CONDITIONS:
+        raise HTTPException(status_code=400, detail="Condicion de bien inventariable invalida.")
+
+    notes = asset_data.notes.strip() if asset_data.notes else ""
+    asset_notes = "Creado desde gasto de adquisicion."
+    if notes:
+        asset_notes = f"{asset_notes} {notes}"
+
+    db.add(
+        Asset(
+            name=name,
+            category=category,
+            description=asset_data.description or expense.description,
+            serial_number=asset_data.serial_number or None,
+            company_id=expense.company_id,
+            acquisition_expense_id=expense.id,
+            acquisition_date=expense.expense_date,
+            acquisition_value=expense.amount,
+            current_condition=current_condition,
+            location=asset_data.location or None,
+            is_active=True,
+            notes=asset_notes,
+        )
+    )
+    db.flush()
+
+
+def _deactivate_linked_assets(expense: Expense, reason: str) -> None:
+    for asset in expense.inventory_assets:
+        asset.is_active = False
+        asset.current_condition = "baja"
+        note = f"Bien desactivado porque el gasto asociado fue {reason}."
+        asset.notes = f"{asset.notes}\n{note}" if asset.notes else note
+
+
 def _current_pending_step(expense: Expense) -> ApprovalStep | None:
     for step in sorted(expense.approval_steps, key=lambda s: s.step_order):
         if step.status == "pending":
@@ -126,6 +196,7 @@ def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> Expe
     db.add(expense)
     db.flush()
 
+    _create_inventory_asset(db, expense, data)
     _build_approval_steps(db, expense)
 
     if data.authorized_by_superintendent:
@@ -232,6 +303,7 @@ def reject_expense(db: Session, expense_id: uuid.UUID, approver: User, reason: s
     expense.approved_by_id = approver.id
     if reason:
         expense.notes = f"[Rechazado] {reason}" if not expense.notes else f"{expense.notes}\n[Rechazado] {reason}"
+    _deactivate_linked_assets(expense, "rechazado")
 
     db.commit()
     db.refresh(expense)
@@ -258,6 +330,7 @@ def void_expense(db: Session, expense_id: uuid.UUID) -> ExpenseResponse:
             step.status = "skipped"
 
     expense.status = "voided"
+    _deactivate_linked_assets(expense, "anulado")
     db.commit()
     db.refresh(expense)
     return _to_response(expense)
@@ -346,5 +419,6 @@ def delete_expense(db: Session, expense_id: uuid.UUID) -> None:
             if pct < float(item.red_threshold):
                 item.is_blocked = False
 
+    _deactivate_linked_assets(expense, "eliminado")
     db.delete(expense)
     db.commit()
