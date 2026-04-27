@@ -7,6 +7,7 @@ class BudgetItemUpdate(BaseModel):
     allocated_amount: float | None = None
     yellow_threshold: float | None = None
     red_threshold: float | None = None
+    fund_source: str | None = None
 
 
 class BudgetItemResponse(BaseModel):
@@ -15,6 +16,7 @@ class BudgetItemResponse(BaseModel):
     number: int
     name: str
     authority: str
+    fund_source: str
     allocated_amount: float
     executed_amount: float
     yellow_threshold: float

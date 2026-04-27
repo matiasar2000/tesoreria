@@ -14,6 +14,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCLP } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 
+const RESTRICTED_SOURCES = new Set(["fiscal", "municipal"]);
+
+const SOURCE_LABELS: Record<string, string> = {
+  fiscal: "Subvención Fiscal",
+  municipal: "Subvención Municipal",
+  propio: "Fondos Propios",
+  donacion: "Donación",
+  general: "General",
+};
+
 export default function NuevoGastoPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -47,6 +57,10 @@ export default function NuevoGastoPage() {
   const amount = parseFloat(form.amount) || 0;
   const exceedsBudget = selectedItem ? amount > selectedItem.available_amount : false;
   const requiresQuotations = amount > 1_000_000;
+  const hasRestrictedFundSource = selectedItem ? RESTRICTED_SOURCES.has(selectedItem.fund_source) : false;
+  const selectedFundSourceLabel = selectedItem
+    ? SOURCE_LABELS[selectedItem.fund_source] ?? selectedItem.fund_source
+    : "";
   const imm = currentFY?.imm_value ?? 500_000;
   const superintendentLimit = imm * 5;
   const exceedsSuperintendentLimit = form.authorized_by_superintendent && amount > superintendentLimit;
@@ -107,6 +121,13 @@ export default function NuevoGastoPage() {
                 {selectedItem && (
                   <p className="text-xs text-muted-foreground">
                     Disponible: {formatCLP(selectedItem.available_amount)} de {formatCLP(selectedItem.allocated_amount)}
+                  </p>
+                )}
+                {hasRestrictedFundSource && (
+                  <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2 flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    Esta partida usa fondos de {selectedFundSourceLabel}. Documente la justificación del gasto en el
+                    campo de notas.
                   </p>
                 )}
               </div>

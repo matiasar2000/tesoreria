@@ -129,6 +129,45 @@ def seed():
             31: 4_326_000,
         }
 
+        fund_sources = {
+            1: "municipal",
+            2: "municipal",
+            3: "municipal",
+            4: "municipal",
+            6: "fiscal",
+            8: "fiscal",
+            9: "municipal",
+            10: "municipal",
+            11: "municipal",
+            12: "municipal",
+            13: "propio",
+            14: "propio",
+            15: "municipal",
+            16: "municipal",
+            18: "municipal",
+            19: "municipal",
+            20: "municipal",
+            21: "propio",
+            23: "municipal",
+            24: "propio",
+            25: "propio",
+            27: "propio",
+            28: "propio",
+            31: "fiscal",
+            32: "fiscal",
+            33: "fiscal",
+            34: "fiscal",
+            35: "municipal",
+            36: "fiscal",
+            37: "fiscal",
+            38: "fiscal",
+            39: "propio",
+            40: "propio",
+            41: "propio",
+            42: "propio",
+            45: "propio",
+        }
+
         for num, name, authority, amount in budget_items:
             executed = execution_data.get(num, 0)
             db.add(BudgetItem(
@@ -136,6 +175,7 @@ def seed():
                 number=num,
                 name=name,
                 authority=authority,
+                fund_source=fund_sources.get(num, "general"),
                 allocated_amount=amount,
                 executed_amount=executed,
                 is_blocked=(executed >= amount),

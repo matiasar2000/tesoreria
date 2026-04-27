@@ -22,6 +22,22 @@ import { Download, Lock } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+const SOURCE_LABELS: Record<string, string> = {
+  fiscal: "Subvención Fiscal",
+  municipal: "Subvención Municipal",
+  propio: "Fondos Propios",
+  donacion: "Donación",
+  general: "General",
+};
+
+const SOURCE_BADGE_CLASSES: Record<string, string> = {
+  fiscal: "border-blue-200 bg-blue-50 text-blue-700",
+  municipal: "border-purple-200 bg-purple-50 text-purple-700",
+  propio: "border-green-200 bg-green-50 text-green-700",
+  donacion: "border-orange-200 bg-orange-50 text-orange-700",
+  general: "border-gray-200 bg-gray-50 text-gray-700",
+};
+
 async function downloadExcel(path: string, filename: string): Promise<void> {
   const token = localStorage.getItem("access_token");
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
@@ -154,6 +170,7 @@ export default function PresupuestoPage() {
                       <TableHead className="w-12">N°</TableHead>
                       <TableHead>Ítem</TableHead>
                       <TableHead>Mando</TableHead>
+                      <TableHead>Fuente</TableHead>
                       <TableHead className="text-right">Asignado</TableHead>
                       <TableHead className="text-right">Ejecutado</TableHead>
                       <TableHead className="text-right">Disponible</TableHead>
@@ -178,6 +195,17 @@ export default function PresupuestoPage() {
                         <TableCell>
                           <Badge variant="outline" className="capitalize text-xs">
                             {item.authority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              SOURCE_BADGE_CLASSES[item.fund_source] ?? SOURCE_BADGE_CLASSES.general
+                            )}
+                          >
+                            {SOURCE_LABELS[item.fund_source] ?? item.fund_source}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-mono">{formatCLP(item.allocated_amount)}</TableCell>

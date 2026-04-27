@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BudgetItemBlocked, InsufficientBudget
@@ -12,6 +14,7 @@ from app.models.fiscal_year import FiscalYear
 from app.models.user import User
 from app.schemas.expense import ApprovalStepBrief, ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from app.services import alert_service, budget_service
+from app.services.fund_validation import validate_fund_usage
 
 
 PENDING_STATUSES = {"pending_review", "pending_approval", "pending_directorio"}
@@ -91,8 +94,9 @@ def _current_pending_step(expense: Expense) -> ApprovalStep | None:
     return None
 
 
-def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> ExpenseResponse:
+def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> ExpenseResponse | JSONResponse:
     item = budget_service.get_budget_item(db, data.budget_item_id)
+    warnings = validate_fund_usage(item, data)
 
     if item.is_blocked:
         raise BudgetItemBlocked(item.name)
@@ -143,7 +147,12 @@ def create_expense(db: Session, data: ExpenseCreate, current_user: User) -> Expe
 
     db.commit()
     db.refresh(expense)
-    return _to_response(expense)
+    response = _to_response(expense)
+    if warnings:
+        response_data = response.model_dump()
+        response_data["warnings"] = warnings
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(response_data))
+    return response
 
 
 def _advance_to_next_step(expense: Expense) -> str:

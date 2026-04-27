@@ -25,6 +25,7 @@ export interface BudgetItem {
   number: number;
   name: string;
   authority: string;
+  fund_source: string;
   allocated_amount: number;
   executed_amount: number;
   available_amount: number;
@@ -68,6 +69,23 @@ export interface Expense {
   budget_item_name: string | null;
   requested_by_name: string | null;
   approval_steps: ApprovalStep[];
+}
+
+export interface Income {
+  id: string;
+  fiscal_year_id: string;
+  source_type: string;
+  source_detail: string | null;
+  amount: number;
+  income_date: string;
+  reference: string | null;
+  company_id: string | null;
+  notes: string | null;
+  created_by_id: string;
+  created_at: string;
+  source_type_label: string;
+  company_name: string | null;
+  created_by_name: string | null;
 }
 
 export interface Document {
@@ -123,6 +141,32 @@ export interface Company {
   is_active: boolean;
 }
 
+export interface Asset {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  serial_number: string | null;
+  company_id: string | null;
+  company_name: string | null;
+  acquisition_date: string | null;
+  acquisition_value: number | null;
+  current_condition: string;
+  location: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetSummary {
+  total_assets: number;
+  total_value: number;
+  active_count: number;
+  baja_count: number;
+  by_category: Record<string, number>;
+}
+
 export interface MonthlyExpense {
   month: number;
   month_name: string;
@@ -173,4 +217,33 @@ export interface ReportsSummary {
   status_breakdown: StatusBreakdown[];
   avg_expense_amount: number;
   total_expenses_count: number;
+}
+
+export interface QuarterlyBalance {
+  fiscal_year: number;
+  quarter: number;
+  quarter_label: string;
+  period_start: string;
+  period_end: string;
+  total_budget: number;
+  total_income: number;
+  total_expenses: number;
+  balance: number;
+  expenses_by_item: BudgetExecution[];
+  execution_percentage: number;
+}
+
+export interface AnnualBalance {
+  fiscal_year: number;
+  total_budget: number;
+  total_income: number;
+  total_expenses: number;
+  final_balance: number;
+  execution_percentage: number;
+  quarterly_summary: QuarterlyBalance[];
+  expenses_by_item: BudgetExecution[];
+  bank_balances: { account_name: string; balance: number }[];
+  pending_expenses: number;
+  approved_expenses: number;
+  voided_expenses: number;
 }

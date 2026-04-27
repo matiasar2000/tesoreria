@@ -15,6 +15,8 @@ import {
   Lock,
   LogOut,
   BarChart3,
+  Package,
+  CircleDollarSign,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -22,6 +24,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/presupuesto", label: "Presupuesto", icon: PieChart },
   { href: "/gastos", label: "Gastos", icon: Receipt },
+  { href: "/ingresos", label: "Ingresos", icon: CircleDollarSign },
+  { href: "/inventario", label: "Inventario", icon: Package },
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/importar", label: "Importar", icon: Upload },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },

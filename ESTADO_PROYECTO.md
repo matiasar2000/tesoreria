@@ -313,10 +313,11 @@ Carga masiva de movimientos bancarios desde archivos CSV o Excel. Detecta automa
 
 ---
 
-### 17. Reportes avanzados
+### 17. Reportes avanzados y balances formales
 
-Pagina dedicada con multiples graficos interactivos para analisis financiero:
+Pagina dedicada con graficos interactivos y balances financieros formales segun reglamento CBT:
 
+**Graficos interactivos:**
 - Tendencia mensual de gastos (grafico de linea)
 - Ejecucion presupuestaria por partida (barras horizontales con semaforo)
 - Distribucion de gastos por compañia (grafico de torta)
@@ -324,30 +325,84 @@ Pagina dedicada con multiples graficos interactivos para analisis financiero:
 - Top 10 proveedores por monto
 - Desglose de gastos por estado
 
+**Balances formales (Art. 55 Reglamento CBT):**
+- Balance trimestral con desglose por partida (Art. 55-d)
+- Balance anual completo con saldos bancarios (Art. 55-g)
+- Rendicion documentada exportable a Excel (Art. 55-f)
+
 | Pantalla | Direccion web | Que hace |
 |----------|---------------|----------|
-| Reportes | `/reportes` | Dashboard analitico con 6 graficos interactivos |
+| Reportes | `/reportes` | Graficos, balance trimestral, balance anual con export Excel |
 
 **Archivos relacionados:**
-- `frontend/src/app/(app)/reportes/page.tsx` — Pagina de reportes con recharts
-- `backend/app/api/v1/reports.py` — Endpoint GET /reports/summary
-- `backend/app/services/report_service.py` — Logica de agregacion y calculos
-- `backend/app/schemas/reports.py` — Schemas de respuesta
+- `frontend/src/app/(app)/reportes/page.tsx` — Pagina con graficos + tabs balance trimestral/anual
+- `backend/app/api/v1/reports.py` — Endpoints summary, quarterly, annual, annual/export
+- `backend/app/services/report_service.py` — Logica de agregacion, trimestres y balance anual
+- `backend/app/schemas/reports.py` — Schemas incluyendo QuarterlyBalance, AnnualBalance
+
+---
+
+### 18. Inventario de bienes institucionales
+
+Libro de Inventario General del CBT (Art. 27-28). Registro de todos los bienes: vehiculos, herramientas, uniformes, equipamiento, inmuebles, mobiliario y material operativo. Custodiado por la Tesoreria General.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Inventario | `/inventario` | CRUD de bienes con filtros por categoria y condicion |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/inventario/page.tsx` — Tabla de bienes con filtros, crear/editar, resumen
+- `backend/app/api/v1/assets.py` — Endpoints CRUD + summary
+- `backend/app/services/asset_service.py` — Logica de bienes
+- `backend/app/models/asset.py` — Modelo de bien institucional
+- `backend/app/schemas/asset.py` — Schemas de bien
+
+---
+
+### 19. Control de ingresos
+
+Registro de ingresos por fuente (Art. 35): subvenciones fiscales/municipales, donaciones, cuotas, rifas, aportes de compañias.
+
+| Pantalla | Direccion web | Que hace |
+|----------|---------------|----------|
+| Ingresos | `/ingresos` | Tabla de ingresos con filtros, registro y grafico por fuente |
+
+**Archivos relacionados:**
+- `frontend/src/app/(app)/ingresos/page.tsx` — Pagina con tabla, filtros, dialog y grafico
+- `backend/app/api/v1/incomes.py` — Endpoints CRUD + summary
+- `backend/app/services/income_service.py` — Logica de ingresos
+- `backend/app/models/income.py` — Modelo de ingreso
+- `backend/app/schemas/income.py` — Schemas de ingreso
+
+---
+
+### 20. Restriccion de uso de fondos
+
+Clasificacion de fuentes de financiamiento en partidas presupuestarias (Art. 30). Los fondos fiscales y municipales muestran advertencia al registrar gastos para documentar la justificacion.
+
+**Archivos relacionados:**
+- `backend/app/models/budget_item.py` — Campo fund_source agregado
+- `backend/app/services/fund_validation.py` — Logica de validacion de fondos restringidos
+- `backend/app/services/expense_service.py` — Validacion integrada al crear gastos
+- `frontend/src/app/(app)/presupuesto/page.tsx` — Badges de fuente por color
+- `frontend/src/app/(app)/gastos/nuevo/page.tsx` — Aviso para fondos restringidos
 
 ---
 
 ## Navegacion del sistema actualizada
 
 1. **Dashboard** (`/dashboard`) — Panel principal
-2. **Presupuesto** (`/presupuesto`) — Control presupuestario con exportacion Excel
+2. **Presupuesto** (`/presupuesto`) — Control presupuestario con fuente de fondos
 3. **Gastos** (`/gastos`) — Gestion de gastos con flujo multi-paso y documentos
-4. **Alertas** (`/alertas`) — Centro de notificaciones
-5. **Importar** (`/importar`) — Importacion Excel
-6. **Reportes** (`/reportes`) — Reportes avanzados con graficos
-7. **Banco** (`/banco`) — Conciliacion bancaria con importacion de cartolas
-8. **Rendiciones** (`/rendiciones`) — Rendiciones por compañia
-9. **Cierre** (`/cierre`) — Cierre contable del año fiscal
-10. **Usuarios** (`/usuarios`) — Administracion de usuarios
+4. **Ingresos** (`/ingresos`) — Registro de ingresos por fuente
+5. **Inventario** (`/inventario`) — Libro de Inventario General de bienes
+6. **Alertas** (`/alertas`) — Centro de notificaciones
+7. **Importar** (`/importar`) — Importacion Excel
+8. **Reportes** (`/reportes`) — Reportes, balances trimestrales/anuales, export Excel
+9. **Banco** (`/banco`) — Conciliacion bancaria con importacion de cartolas
+10. **Rendiciones** (`/rendiciones`) — Rendiciones por compañia
+11. **Cierre** (`/cierre`) — Cierre contable del año fiscal
+12. **Usuarios** (`/usuarios`) — Administracion de usuarios
 
 ---
 

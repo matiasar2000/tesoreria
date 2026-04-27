@@ -1,12 +1,30 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import type { ReportsSummary } from "@/types/api";
+import type { AnnualBalance, BudgetExecution, QuarterlyBalance, ReportsSummary } from "@/types/api";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCLP } from "@/lib/utils";
-import { DollarSign, TrendingUp, Users, Hash } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatCLP, formatDate } from "@/lib/utils";
+import { DollarSign, TrendingUp, Users, Hash, Download } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -44,6 +62,35 @@ const STATUS_COLORS: Record<string, string> = {
   draft: "#64748b",
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+async function downloadExcel(path: string, filename: string): Promise<void> {
+  const token = localStorage.getItem("access_token");
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+
+  if (response.status === 401) {
+    localStorage.removeItem("access_token");
+    window.location.href = "/login";
+    return;
+  }
+
+  if (!response.ok) {
+    throw new Error("No se pudo exportar el archivo Excel.");
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function clpFormatter(value: any) {
   return [formatCLP(Number(value)), "Monto"];
@@ -54,10 +101,80 @@ function clpFormatterSingle(value: any) {
   return [formatCLP(Number(value))];
 }
 
+function ExecutionTable({ items }: { items: BudgetExecution[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-16">N</TableHead>
+          <TableHead>Partida</TableHead>
+          <TableHead className="text-right">Asignado</TableHead>
+          <TableHead className="text-right">Ejecutado</TableHead>
+          <TableHead className="text-right">Disponible</TableHead>
+          <TableHead className="text-right">% Ejec.</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {items.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+              Sin gastos aprobados para el periodo.
+            </TableCell>
+          </TableRow>
+        ) : (
+          items.map((item) => (
+            <TableRow key={item.item_number}>
+              <TableCell className="font-mono">{item.item_number}</TableCell>
+              <TableCell className="font-medium">{item.item_name}</TableCell>
+              <TableCell className="text-right font-mono">{formatCLP(item.allocated)}</TableCell>
+              <TableCell className="text-right font-mono">{formatCLP(item.executed)}</TableCell>
+              <TableCell className="text-right font-mono">{formatCLP(item.available)}</TableCell>
+              <TableCell className="text-right font-mono">{item.percentage.toFixed(1)}%</TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function ReportesPage() {
+  const [selectedQuarter, setSelectedQuarter] = useState("1");
+
   const { data, isLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: () => api.get<ReportsSummary>("/reports/summary"),
+  });
+
+  const reportYear = data?.fiscal_year ?? new Date().getFullYear();
+
+  const {
+    data: quarterlyBalance,
+    isLoading: isQuarterlyLoading,
+    isError: isQuarterlyError,
+  } = useQuery({
+    queryKey: ["reports", "quarterly", reportYear, selectedQuarter],
+    queryFn: () =>
+      api.get<QuarterlyBalance>(`/reports/quarterly?year=${reportYear}&quarter=${selectedQuarter}`),
+    enabled: Boolean(data),
+  });
+
+  const {
+    data: annualBalance,
+    isLoading: isAnnualLoading,
+    isError: isAnnualError,
+  } = useQuery({
+    queryKey: ["reports", "annual", reportYear],
+    queryFn: () => api.get<AnnualBalance>(`/reports/annual?year=${reportYear}`),
+    enabled: Boolean(data),
+  });
+
+  const exportAnnual = useMutation({
+    mutationFn: (year: number) =>
+      downloadExcel(`/reports/annual/export?year=${year}`, `balance-anual-${year}.xlsx`),
+    onError: () => {
+      alert("No se pudo exportar el balance anual a Excel.");
+    },
   });
 
   if (isLoading || !data) {
@@ -196,7 +313,7 @@ export default function ReportesPage() {
                       tick={{ fontSize: 11 }}
                     />
                     <Tooltip
-                      formatter={(value: any) => [`${Number(value).toFixed(1)}%`, "Ejecución"]}
+                      formatter={(value: unknown) => [`${Number(value).toFixed(1)}%`, "Ejecución"]}
                       labelFormatter={(label) => String(label)}
                     />
                     <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
@@ -227,8 +344,8 @@ export default function ReportesPage() {
                         cx="50%"
                         cy="45%"
                         outerRadius={130}
-                        label={({ name, percent }: any) =>
-                          `${name}: ${(percent * 100).toFixed(1)}%`
+                        label={({ name, percent }: { name?: string; percent?: number }) =>
+                          `${name ?? ""}: ${((percent ?? 0) * 100).toFixed(1)}%`
                         }
                         labelLine={{ stroke: "#94a3b8" }}
                       >
@@ -314,9 +431,9 @@ export default function ReportesPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip
-                        formatter={(value: any, name: any) => {
+                        formatter={(value: unknown, name: unknown) => {
                           if (name === "total") return [formatCLP(Number(value)), "Monto"];
-                          return [value, "Cantidad"];
+                          return [String(value), "Cantidad"];
                         }}
                       />
                       <Bar dataKey="count" name="Cantidad" radius={[4, 4, 0, 0]}>
@@ -335,6 +452,254 @@ export default function ReportesPage() {
             </CardContent>
           </Card>
         </div>
+
+        <section className="space-y-4">
+          <Tabs defaultValue="quarterly">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <TabsList>
+                <TabsTrigger value="quarterly">Balance Trimestral</TabsTrigger>
+                <TabsTrigger value="annual">Balance Anual</TabsTrigger>
+              </TabsList>
+              <p className="text-sm text-muted-foreground">Ano fiscal {reportYear}</p>
+            </div>
+
+            <TabsContent value="quarterly" className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Balance Trimestral</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {quarterlyBalance
+                      ? `${formatDate(quarterlyBalance.period_start)} - ${formatDate(quarterlyBalance.period_end)}`
+                      : "Periodo trimestral"}
+                  </p>
+                </div>
+                <Select value={selectedQuarter} onValueChange={(v: unknown) => setSelectedQuarter(String(v ?? "1"))}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Seleccionar trimestre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 - Enero / Marzo</SelectItem>
+                    <SelectItem value="2">2 - Abril / Junio</SelectItem>
+                    <SelectItem value="3">3 - Julio / Septiembre</SelectItem>
+                    <SelectItem value="4">4 - Octubre / Diciembre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {isQuarterlyLoading ? (
+                <p className="text-sm text-muted-foreground">Cargando balance trimestral...</p>
+              ) : isQuarterlyError || !quarterlyBalance ? (
+                <p className="text-sm text-red-600">No se pudo cargar el balance trimestral.</p>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Ingresos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{formatCLP(quarterlyBalance.total_income)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Gastos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{formatCLP(quarterlyBalance.total_expenses)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Saldo</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className={`text-2xl font-bold ${quarterlyBalance.balance < 0 ? "text-red-600" : "text-green-600"}`}>
+                          {formatCLP(quarterlyBalance.balance)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Ejecucion</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{quarterlyBalance.execution_percentage.toFixed(1)}%</p>
+                        <p className="text-xs text-muted-foreground">
+                          de {formatCLP(quarterlyBalance.total_budget)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Gastos por Partida</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ExecutionTable items={quarterlyBalance.expenses_by_item} />
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="annual" className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Balance Anual</h2>
+                  <p className="text-sm text-muted-foreground">Resumen al 31 de diciembre</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportAnnual.mutate(reportYear)}
+                  disabled={!annualBalance || exportAnnual.isPending}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {exportAnnual.isPending ? "Exportando..." : "Exportar Excel"}
+                </Button>
+              </div>
+
+              {isAnnualLoading ? (
+                <p className="text-sm text-muted-foreground">Cargando balance anual...</p>
+              ) : isAnnualError || !annualBalance ? (
+                <p className="text-sm text-red-600">No se pudo cargar el balance anual.</p>
+              ) : (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Presupuesto</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{formatCLP(annualBalance.total_budget)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Ingresos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{formatCLP(annualBalance.total_income)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Gastos</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{formatCLP(annualBalance.total_expenses)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {annualBalance.execution_percentage.toFixed(1)}% ejecutado
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-muted-foreground">Saldo Final</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className={`text-2xl font-bold ${annualBalance.final_balance < 0 ? "text-red-600" : "text-green-600"}`}>
+                          {formatCLP(annualBalance.final_balance)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Comparativo Trimestral</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Trimestre</TableHead>
+                              <TableHead className="text-right">Ingresos</TableHead>
+                              <TableHead className="text-right">Gastos</TableHead>
+                              <TableHead className="text-right">Saldo</TableHead>
+                              <TableHead className="text-right">% Ejec.</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {annualBalance.quarterly_summary.map((quarter) => (
+                              <TableRow key={quarter.quarter}>
+                                <TableCell className="font-medium">{quarter.quarter_label}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCLP(quarter.total_income)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCLP(quarter.total_expenses)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCLP(quarter.balance)}</TableCell>
+                                <TableCell className="text-right font-mono">{quarter.execution_percentage.toFixed(1)}%</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Cuentas y Estados</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Cuenta</TableHead>
+                              <TableHead className="text-right">Saldo</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {annualBalance.bank_balances.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={2} className="py-6 text-center text-muted-foreground">
+                                  Sin cuentas bancarias activas.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              annualBalance.bank_balances.map((account) => (
+                                <TableRow key={account.account_name}>
+                                  <TableCell className="font-medium">{account.account_name}</TableCell>
+                                  <TableCell className="text-right font-mono">{formatCLP(account.balance)}</TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground">Pendientes</p>
+                            <p className="text-xl font-bold">{annualBalance.pending_expenses}</p>
+                          </div>
+                          <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground">Aprobados</p>
+                            <p className="text-xl font-bold">{annualBalance.approved_expenses}</p>
+                          </div>
+                          <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground">Anulados</p>
+                            <p className="text-xl font-bold">{annualBalance.voided_expenses}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Ejecucion Anual por Partida</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ExecutionTable items={annualBalance.expenses_by_item} />
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        </section>
       </div>
     </>
   );

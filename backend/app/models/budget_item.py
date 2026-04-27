@@ -15,6 +15,7 @@ class BudgetItem(Base):
     number: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     authority: Mapped[str] = mapped_column(String(20), nullable=False)
+    fund_source: Mapped[str] = mapped_column(String(50), nullable=False, default="general")
     allocated_amount: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     executed_amount: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False, default=0)
     yellow_threshold: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=80.00)
