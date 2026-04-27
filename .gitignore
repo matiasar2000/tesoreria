@@ -38,3 +38,7 @@ postgres_data/
 htmlcov/
 .coverage
 coverage.xml
+
+# Pytest
+.pytest_cache/
+pytest-cache-files-*/

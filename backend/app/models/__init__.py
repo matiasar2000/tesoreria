@@ -1,4 +1,5 @@
 from app.models.alert import Alert
+from app.models.ai_run import AiRun
 from app.models.approval_step import ApprovalStep
 from app.models.asset import Asset
 from app.models.audit_log import AuditLog
@@ -16,6 +17,7 @@ from app.models.user import User
 
 __all__ = [
     "Alert",
+    "AiRun",
     "ApprovalStep",
     "Asset",
     "AuditLog",

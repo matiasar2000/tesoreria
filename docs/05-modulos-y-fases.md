@@ -94,6 +94,8 @@ Cada módulo del catálogo original se implementa como combinación de endpoints
 **Duración estimada:** 6-8 semanas (implementación gradual)
 **Prioridad:** POSTERIOR
 
+**Plan ejecutivo:** ver `docs/08-arte-tecnico-ia-langgraph.md` para guardrails, estados, nodos, workflows y tools de la integración IA con LangGraph.
+
 **Incluye (en orden sugerido):**
 1. **B5:** Clasificación inteligente de gastos (quick win, mejora UX)
 2. **B1:** Lectura inteligente de documentos (OCR + IA)

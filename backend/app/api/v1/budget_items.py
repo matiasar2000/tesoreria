@@ -11,6 +11,12 @@ from app.schemas.budget_item import BudgetItemResponse, BudgetItemUpdate
 from app.services import budget_service
 
 router = APIRouter(prefix="/fiscal-years/{fiscal_year_id}/budget-items", tags=["Partidas Presupuestarias"])
+direct_router = APIRouter(prefix="/budget-items", tags=["Partidas Presupuestarias"])
+
+
+@direct_router.get("/{item_id}", response_model=BudgetItemResponse)
+def get_budget_item_direct(item_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    return budget_service.get_budget_item(db, item_id)
 
 
 @router.get("", response_model=list[BudgetItemResponse])

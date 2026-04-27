@@ -247,3 +247,83 @@ export interface AnnualBalance {
   approved_expenses: number;
   voided_expenses: number;
 }
+
+export interface AiQueryRequest {
+  question: string;
+  year?: number;
+  thread_id?: string | null;
+}
+
+export interface AiSource {
+  entity_type: string;
+  label: string;
+  entity_id: string | null;
+  detail: string | null;
+}
+
+export interface AiFinding {
+  code: string;
+  severity: string;
+  message: string;
+  source: AiSource | null;
+}
+
+export interface AiToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  result_summary: string;
+}
+
+export interface AiProposedAction {
+  action_type: string;
+  label: string;
+  requires_human_review: boolean;
+}
+
+export interface AiQueryResponse {
+  run_id: string;
+  thread_id: string;
+  status: string;
+  intent: string;
+  answer: string;
+  confidence: number | null;
+  sources: AiSource[];
+  findings: AiFinding[];
+  proposed_actions: AiProposedAction[];
+  tool_calls: AiToolCall[];
+}
+
+export interface AiRunListItem {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  status: string;
+  intent: string;
+  question: string | null;
+  confidence: number | null;
+  final_response: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface AiRunResponse {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  status: string;
+  intent: string;
+  input_payload: Record<string, unknown>;
+  user_context: Record<string, unknown>;
+  domain_context: Record<string, unknown>;
+  policy_context: Record<string, unknown>;
+  tool_calls: unknown[];
+  findings: unknown[];
+  confidence: number | null;
+  proposed_actions: unknown[];
+  human_review: Record<string, unknown> | null;
+  final_response: string | null;
+  audit_trace: unknown[];
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}

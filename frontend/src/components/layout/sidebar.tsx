@@ -17,6 +17,7 @@ import {
   BarChart3,
   Package,
   CircleDollarSign,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/importar", label: "Importar", icon: Upload },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
+  { href: "/ia", label: "Asistente IA", icon: Bot },
   { href: "/banco", label: "Banco", icon: Landmark },
   { href: "/rendiciones", label: "Rendiciones", icon: FileText },
   { href: "/cierre", label: "Cierre Contable", icon: Lock },

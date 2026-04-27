@@ -47,9 +47,13 @@ export default function BudgetItemDetailPage() {
   const fyId = searchParams.get("fy");
 
   const { data: item, isLoading: itemLoading } = useQuery({
-    queryKey: ["budget-item", itemId],
-    queryFn: () => api.get<BudgetItem>(`/fiscal-years/${fyId}/budget-items/${itemId}`),
-    enabled: !!fyId,
+    queryKey: ["budget-item", itemId, fyId],
+    queryFn: () => {
+      if (fyId) {
+        return api.get<BudgetItem>(`/fiscal-years/${fyId}/budget-items/${itemId}`);
+      }
+      return api.get<BudgetItem>(`/budget-items/${itemId}`);
+    },
   });
 
   const { data: expenses, isLoading: expensesLoading } = useQuery({

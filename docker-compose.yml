@@ -25,8 +25,14 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
       - ENVIRONMENT=development
+      - WATCHFILES_FORCE_POLLING=true
+      - WATCHFILES_IGNORE_PERMISSION_DENIED=true
     volumes:
-      - ./backend:/app
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+      - ./backend/seeds:/app/seeds
+      - ./backend/tests:/app/tests
       - uploads_data:/app/uploads
     depends_on:
       db:
