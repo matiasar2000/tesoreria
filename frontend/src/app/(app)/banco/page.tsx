@@ -212,7 +212,7 @@ export default function BancoPage() {
           <TabsContent value="transactions" className="space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <Select value={selectedAccount} onValueChange={(v: any) => setSelectedAccount(v)}>
+                <Select value={selectedAccount} onValueChange={(value) => setSelectedAccount(value ?? "all")}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Todas las cuentas" />
                   </SelectTrigger>
@@ -384,7 +384,7 @@ export default function BancoPage() {
               </div>
               <div>
                 <Label>Tipo</Label>
-                <Select value={newAccount.account_type} onValueChange={(v: any) => setNewAccount({ ...newAccount, account_type: v })}>
+                <Select value={newAccount.account_type} onValueChange={(value) => setNewAccount({ ...newAccount, account_type: value ?? "corriente" })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="corriente">Corriente</SelectItem>
@@ -420,7 +420,7 @@ export default function BancoPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Cuenta</Label>
-                <Select value={newTx.bank_account_id} onValueChange={(v: any) => setNewTx({ ...newTx, bank_account_id: v })}>
+                <Select value={newTx.bank_account_id} onValueChange={(value) => setNewTx({ ...newTx, bank_account_id: value ?? "" })}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                   <SelectContent>
                     {accounts?.map((a) => (
@@ -439,7 +439,7 @@ export default function BancoPage() {
               </div>
               <div>
                 <Label>Tipo</Label>
-                <Select value={newTx.transaction_type} onValueChange={(v: any) => setNewTx({ ...newTx, transaction_type: v })}>
+                <Select value={newTx.transaction_type} onValueChange={(value) => setNewTx({ ...newTx, transaction_type: value ?? "debit" })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="debit">Egreso</SelectItem>
@@ -516,7 +516,7 @@ export default function BancoPage() {
             >
               <div>
                 <Label>Cuenta Bancaria</Label>
-                <Select value={importAccount} onValueChange={(v: any) => setImportAccount(v)}>
+                <Select value={importAccount} onValueChange={(value) => setImportAccount(value ?? "")}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                   <SelectContent>
                     {accounts?.map((a) => (

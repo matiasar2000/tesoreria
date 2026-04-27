@@ -5,8 +5,7 @@ import { api } from "@/lib/api-client";
 import type { DashboardSummary } from "@/types/api";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { formatCLP, formatPercent, cn, statusColor } from "@/lib/utils";
+import { formatCLP, formatPercent, cn } from "@/lib/utils";
 import { AlertTriangle, DollarSign, PieChart, TrendingUp } from "lucide-react";
 import {
   BarChart,

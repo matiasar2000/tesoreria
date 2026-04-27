@@ -21,18 +21,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function hasStoredToken(): boolean {
+  return typeof window !== "undefined" && Boolean(localStorage.getItem("access_token"));
+}
+
+async function getCurrentUser(): Promise<User | null> {
+  if (!hasStoredToken()) return null;
+  return api.get<User>("/auth/me");
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
     try {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      const data = await api.get<User>("/auth/me");
+      const data = await getCurrentUser();
       setUser(data);
     } catch {
       localStorage.removeItem("access_token");
@@ -43,8 +47,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+    let isMounted = true;
+    void Promise.resolve()
+      .then(() => getCurrentUser())
+      .then((data) => {
+        if (isMounted) setUser(data);
+      })
+      .catch(() => {
+        localStorage.removeItem("access_token");
+        if (isMounted) setUser(null);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const login = async (email: string, password: string) => {
     const data = await api.post<{ access_token: string }>("/auth/login", { email, password });

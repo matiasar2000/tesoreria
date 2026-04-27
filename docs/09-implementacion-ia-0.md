@@ -300,15 +300,17 @@ Estos limites son intencionales para IA-0: primero control, auditoria y lectura 
 
 ### IA-0.1
 
-- Listado de corridas IA en frontend: implementado en `/ia`.
-- Detalle auditable de `ai_runs`: implementado en `/ia`.
-- Filtros por estado e intencion: disponible por API; pendiente de exponer en UI.
+- Consulta operativa en frontend: implementada en `/ia`.
+- Listado y detalle auditable de `ai_runs`: disponible por API.
+- Trazas tecnicas y auditoria avanzada: fuera de `/ia`; se centralizan en Langfuse local.
 
 ### IA-0.2
 
-- Separar tools read-only en modulo propio.
-- Crear interfaces estables para tools antes de conectar LangGraph.
-- Agregar tests de permisos por rol.
+- Tools read-only separadas en `backend/app/services/ai_tools/`.
+- Interfaz estable `ReadOnlyToolContext` para tool calls, fuentes y hallazgos.
+- Orquestacion principal mantenida en `ai_service.py`.
+- Tests de permisos por rol vigentes para bloqueo bancario.
+- Auditoria tecnica separada de la UI `/ia` mediante stack local Langfuse documentado en `docs/10-langfuse-local.md`.
 
 ### IA-1
 
@@ -341,13 +343,31 @@ IA-0 queda aceptado si:
 - Toda consulta genera `audit_log`.
 - No existe ningun camino de escritura financiera desde `/ai/query`.
 
-Estado actual:
+Estado de cierre:
 
 | Criterio | Estado |
 |---|---|
-| Consulta autenticada en `/ia` | Cumplido |
-| Respuesta con evidencia o limitacion | Cumplido |
-| Bloqueo de banco por rol sin permiso | Cubierto por test |
-| Persistencia en `ai_runs` | Cumplido y visible en historial |
-| Registro en `audit_log` | Cubierto por test |
-| Sin escritura financiera desde `/ai/query` | Cubierto por politica read-only y test |
+| Consulta autenticada en `/ia` | Cerrado. Validado con login `tesorero@cbt.cl` y consulta desde UI |
+| Respuesta con evidencia o limitacion | Cerrado. La UI muestra respuesta, hallazgos y evidencia |
+| Bloqueo de banco por rol sin permiso | Cerrado. API devuelve `bloqueado` para `directorio@cbt.cl` con `bank_scope_denied` |
+| Persistencia en `ai_runs` | Cerrado. `POST /ai/query` crea corrida y `GET /ai/runs/{id}` devuelve detalle auditable |
+| Registro en `audit_log` | Cerrado. Cada corrida verificada genera `audit_log.action = ai_query` |
+| Sin escritura financiera desde `/ai/query` | Cerrado. Conteos de tablas financieras permanecen iguales; solo aumentan `ai_runs` y `audit_log` |
+
+Validacion de cierre ejecutada el 2026-04-27:
+
+| Verificacion | Resultado |
+|---|---|
+| `python -m compileall app tests` | OK |
+| `pytest -p no:cacheprovider tests` | OK, 4 tests passed |
+| `npm run build` | OK |
+| `npx eslint src/app/(app)/ia/page.tsx src/types/api.ts` | OK |
+| `docker-compose build backend frontend` | OK |
+| Login y consulta desde `/ia` con Playwright | OK |
+| Evidencia `fiscal_year` a `/presupuesto` | OK |
+| Evidencia `budget_item` a `/presupuesto/{id}` | OK |
+| UI `/ia` sin trazas tecnicas para usuarios de Tesoreria | OK |
+
+Observacion: `npm run lint` global queda limpio despues de corregir deuda previa en `banco`, `rendiciones`, `auth`, `alertas` y `dashboard`.
+
+Resultado: **IA-0 cerrado y aceptado funcionalmente** como asistente read-only auditable.
