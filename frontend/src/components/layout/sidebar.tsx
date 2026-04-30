@@ -19,9 +19,18 @@ import {
   CircleDollarSign,
   Bot,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { AI_ASSISTANT_ROLES } from "@/lib/permissions";
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  roles?: readonly string[];
+}
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/presupuesto", label: "Presupuesto", icon: PieChart },
   { href: "/gastos", label: "Gastos", icon: Receipt },
@@ -30,7 +39,7 @@ const navItems = [
   { href: "/alertas", label: "Alertas", icon: Bell },
   { href: "/importar", label: "Importar", icon: Upload },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
-  { href: "/ia", label: "Asistente IA", icon: Bot },
+  { href: "/ia", label: "Asistente IA", icon: Bot, roles: AI_ASSISTANT_ROLES },
   { href: "/banco", label: "Banco", icon: Landmark },
   { href: "/rendiciones", label: "Rendiciones", icon: FileText },
   { href: "/cierre", label: "Cierre Contable", icon: Lock },
@@ -40,6 +49,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const visibleNavItems = navItems.filter((item) => !item.roles || (user?.role && item.roles.includes(user.role)));
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 border-r bg-card">
@@ -55,7 +65,7 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.href);
             return (

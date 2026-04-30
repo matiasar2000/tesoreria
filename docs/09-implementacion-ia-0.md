@@ -2,7 +2,7 @@
 
 Documentacion tecnica del primer corte de integracion IA basado en el arte tecnico de `docs/08-arte-tecnico-ia-langgraph.md`.
 
-Este entregable implementa una base operativa **read-only** para consultas de Tesoreria. No integra aun un proveedor LLM ni LangGraph como dependencia runtime; deja el backend preparado con estado auditable, permisos, trazabilidad de tools y una primera experiencia frontend.
+Este entregable implementa una base operativa **read-only** para consultas de Tesoreria. No integra aun un proveedor LLM, pero ya separa tools, workflow tipo LangGraph, harness minimo, versionado de comportamiento y observabilidad tecnica opcional con Langfuse v3.
 
 ---
 
@@ -39,7 +39,10 @@ Archivos principales:
 | Archivo | Proposito |
 |---|---|
 | `backend/app/api/v1/ai.py` | Endpoints publicos del modulo IA |
-| `backend/app/services/ai_service.py` | Orquestacion read-only, clasificacion, guardrails y armado de respuesta |
+| `backend/app/services/ai_service.py` | Caso de uso read-only, clasificacion, guardrails y armado de respuesta |
+| `backend/app/services/ai_graph.py` | Workflow versionado compatible con LangGraph y fallback secuencial |
+| `backend/app/services/ai_observability.py` | Wrapper opcional para trazas tecnicas en Langfuse v3 |
+| `backend/app/services/ai_tools/` | Tools read-only separadas por dominio |
 | `backend/app/schemas/ai.py` | Schemas Pydantic de requests, respuestas, sources, findings y tool calls |
 | `backend/app/models/ai_run.py` | Modelo persistente de corrida IA |
 | `backend/alembic/versions/d3e7b7a9c1f2_add_ai_runs_table.py` | Migracion de tabla `ai_runs` |
@@ -92,7 +95,7 @@ Response:
 
 Notas:
 
-- Requiere usuario autenticado.
+- Requiere rol `tesorero` o `equipo_tesoreria`.
 - Toda ejecucion genera una fila en `ai_runs`.
 - Tambien registra auditoria en `audit_log` con accion `ai_query`.
 - No ejecuta escrituras financieras.
@@ -103,9 +106,9 @@ Obtiene el detalle auditable de una corrida IA.
 
 Reglas de acceso:
 
-- El usuario que ejecuto la corrida puede verla.
-- Roles de Tesoreria pueden revisar corridas.
-- Otros usuarios quedan bloqueados.
+- Requiere rol `tesorero`.
+- La auditoria tecnica no se muestra en la UI `/ia` de usuarios operativos.
+- Otros usuarios quedan bloqueados por permisos de API.
 
 ### `GET /api/v1/ai/runs`
 
@@ -120,8 +123,8 @@ Query params:
 
 Reglas de acceso:
 
-- Roles de Tesoreria pueden ver todas las corridas.
-- Roles fuera de Tesoreria solo ven sus propias corridas.
+- Requiere rol `tesorero`.
+- El listado queda reservado para auditoria tecnica/administrativa.
 
 ---
 
@@ -209,20 +212,20 @@ Campos principales:
 
 ## 7. Flujo actual
 
-Flujo simplificado de `run_read_only_query`:
+`run_read_only_query` delega la ejecucion a `backend/app/services/ai_graph.py`.
 
-1. Crear `AiRun` con estado `iniciado`.
-2. Normalizar payload.
-3. Clasificar intencion.
-4. Validar alcance por rol.
-5. Si no hay permiso, cerrar como `bloqueado`.
-6. Recuperar contexto minimo necesario.
-7. Generar respuesta determinista con evidencia.
-8. Guardar `domain_context`, `tool_calls`, `findings`, `confidence` y `audit_trace`.
-9. Registrar `audit_log`.
-10. Retornar respuesta al frontend.
+Nodos activos:
 
-Este flujo representa el esqueleto que luego puede reemplazarse o envolverse con LangGraph.
+1. `receive_request`: normaliza la solicitud y registra inicio.
+2. `initialize_harness`: fija `graph_version`, `agent_behavior_version`, budgets, politica de modelo y allowlist de tools.
+3. `classify_intent`: clasifica la intencion de forma determinista.
+4. `authorize_scope`: valida alcance por rol y puede cerrar como `bloqueado`.
+5. `retrieve_context`: ejecuta tools read-only permitidas.
+6. `draft_answer`: arma respuesta determinista con evidencia.
+7. `finalize_response`: persiste estado final, fuentes, hallazgos, acciones sugeridas y traza.
+8. `log_audit`: marca la traza para auditoria; el servicio registra `audit_log` una sola vez.
+
+Si `langgraph` esta instalado, se compila y ejecuta un `StateGraph`. Si no esta disponible o falla el runtime, el mismo flujo se ejecuta en modo secuencial y deja `graph_runtime` en `policy_context`.
 
 ---
 
@@ -236,11 +239,9 @@ La pantalla permite:
 - Ver respuesta principal.
 - Ver hallazgos.
 - Ver evidencia interna.
-- Ver tools ejecutadas.
-- Ver estado, intencion y confianza.
-- Ver historial de corridas IA.
-- Seleccionar una corrida y revisar su detalle auditable.
-- Revisar payload, contexto de usuario, policies, tools, hallazgos y traza.
+- Ver estado y confianza de la respuesta.
+
+La pantalla no muestra trazas tecnicas, tool payloads, historial de corridas ni contexto interno completo. Esa auditoria queda reservada para el rol tecnico/administrativo y para Langfuse local.
 
 Preguntas sugeridas iniciales:
 
@@ -269,14 +270,10 @@ npm run lint
 Resultado:
 
 - `compileall`: OK
-- `pytest -p no:cacheprovider tests`: OK, 2 tests passed
+- `pytest -p no:cacheprovider tests`: OK
 - Import de FastAPI app con venv: OK
 - `npm run build`: OK
-- `npm run lint`: falla por deuda previa en archivos no relacionados:
-  - `frontend/src/app/(app)/banco/page.tsx`
-  - `frontend/src/app/(app)/rendiciones/page.tsx`
-  - `frontend/src/lib/auth.tsx`
-  - warnings existentes en `alertas` y `dashboard`
+- `npm run lint`: OK
 
 Nota operacional: se agrego a `.gitignore` el patron `pytest-cache-files-*/` porque pytest genero carpetas temporales con ACL restringida en Windows.
 
@@ -284,11 +281,11 @@ Nota operacional: se agrego a `.gitignore` el patron `pytest-cache-files-*/` por
 
 ## 10. Limites conocidos
 
-- No hay integracion real con LangGraph todavia.
+- El workflow ya es compatible con LangGraph, pero no usa checkpoints persistentes ni interrupts humanos.
 - No hay llamada a LLM.
 - La clasificacion de intencion es por palabras clave.
 - Las respuestas son deterministas y ejecutivas.
-- No hay streaming ni historial visual completo.
+- No hay streaming ni historial visual operativo.
 - `human_review` queda reservado para IA-1/IA-3.
 - No existen tools de escritura IA habilitadas.
 
@@ -301,16 +298,18 @@ Estos limites son intencionales para IA-0: primero control, auditoria y lectura 
 ### IA-0.1
 
 - Consulta operativa en frontend: implementada en `/ia`.
-- Listado y detalle auditable de `ai_runs`: disponible por API.
+- Listado y detalle auditable de `ai_runs`: disponible por API y restringido a `tesorero`.
 - Trazas tecnicas y auditoria avanzada: fuera de `/ia`; se centralizan en Langfuse local.
 
 ### IA-0.2
 
 - Tools read-only separadas en `backend/app/services/ai_tools/`.
 - Interfaz estable `ReadOnlyToolContext` para tool calls, fuentes y hallazgos.
-- Orquestacion principal mantenida en `ai_service.py`.
-- Tests de permisos por rol vigentes para bloqueo bancario.
+- Workflow read-only extraido a `backend/app/services/ai_graph.py` con nodos equivalentes a LangGraph.
+- Harness minimo con `graph_version`, `agent_behavior_version`, budgets, politica de contexto y allowlist de tools.
+- Tests de permisos por rol vigentes para consulta IA, auditoria tecnica y bloqueo bancario.
 - Auditoria tecnica separada de la UI `/ia` mediante stack local Langfuse documentado en `docs/10-langfuse-local.md`.
+- Wrapper opcional de Langfuse en `backend/app/services/ai_observability.py`.
 
 ### IA-1
 
@@ -320,15 +319,17 @@ Estos limites son intencionales para IA-0: primero control, auditoria y lectura 
 
 ### LangGraph
 
-- Instalar dependencia cuando se defina proveedor IA y estrategia de ejecucion.
-- Convertir el flujo actual en nodos equivalentes:
+- La dependencia `langgraph>=1,<2` queda declarada en `backend/requirements.txt`.
+- El flujo actual ya tiene nodos equivalentes:
   - `receive_request`
-  - `authorize_scope`
+  - `initialize_harness`
   - `classify_intent`
+  - `authorize_scope`
   - `retrieve_context`
   - `draft_answer`
-  - `log_audit`
   - `finalize_response`
+  - `log_audit`
+- Siguiente mejora: agregar checkpoints, interrupts humanos y suites golden antes de habilitar IA con escritura controlada.
 
 ---
 
@@ -336,33 +337,39 @@ Estos limites son intencionales para IA-0: primero control, auditoria y lectura 
 
 IA-0 queda aceptado si:
 
-- Un usuario autenticado puede consultar `/ia`.
+- Un usuario con rol `tesorero` o `equipo_tesoreria` puede consultar `/ia`.
 - La respuesta muestra evidencia o limitacion.
 - Una consulta bancaria queda bloqueada para roles sin permiso.
 - Toda consulta genera `ai_runs`.
 - Toda consulta genera `audit_log`.
 - No existe ningun camino de escritura financiera desde `/ai/query`.
+- La auditoria tecnica queda fuera de la UI operativa de Tesoreria.
 
 Estado de cierre:
 
 | Criterio | Estado |
 |---|---|
-| Consulta autenticada en `/ia` | Cerrado. Validado con login `tesorero@cbt.cl` y consulta desde UI |
+| Consulta autorizada en `/ia` | Cerrado. Endpoint restringido a `tesorero` y `equipo_tesoreria`; sidebar oculta `/ia` para otros roles y la ruta directa redirige a `/dashboard` |
 | Respuesta con evidencia o limitacion | Cerrado. La UI muestra respuesta, hallazgos y evidencia |
 | Bloqueo de banco por rol sin permiso | Cerrado. API devuelve `bloqueado` para `directorio@cbt.cl` con `bank_scope_denied` |
-| Persistencia en `ai_runs` | Cerrado. `POST /ai/query` crea corrida y `GET /ai/runs/{id}` devuelve detalle auditable |
+| Persistencia en `ai_runs` | Cerrado. `POST /ai/query` crea corrida; detalle/listado auditable queda restringido a `tesorero` |
 | Registro en `audit_log` | Cerrado. Cada corrida verificada genera `audit_log.action = ai_query` |
 | Sin escritura financiera desde `/ai/query` | Cerrado. Conteos de tablas financieras permanecen iguales; solo aumentan `ai_runs` y `audit_log` |
+| Auditoria tecnica separada | Cerrado. UI `/ia` no muestra trazas; Langfuse local queda como consola tecnica opcional |
 
 Validacion de cierre ejecutada el 2026-04-27:
 
 | Verificacion | Resultado |
 |---|---|
 | `python -m compileall app tests` | OK |
-| `pytest -p no:cacheprovider tests` | OK, 4 tests passed |
+| `pytest -p no:cacheprovider tests` | OK, 5 tests passed con `langgraph` instalado |
+| `python -c "from app.main import app; print(app.title)"` | OK |
+| `pip install -r requirements.txt` | OK, instala `langgraph` y `langfuse` |
+| `npm run lint` | OK |
 | `npm run build` | OK |
-| `npx eslint src/app/(app)/ia/page.tsx src/types/api.ts` | OK |
-| `docker-compose build backend frontend` | OK |
+| `docker compose build backend frontend` | OK |
+| Langfuse local `GET /api/public/health` | OK, version `3.163.0` |
+| Consulta `/ia` con `LANGFUSE_ENABLED=true` | OK, trace correlacionado por `erp_run_id` |
 | Login y consulta desde `/ia` con Playwright | OK |
 | Evidencia `fiscal_year` a `/presupuesto` | OK |
 | Evidencia `budget_item` a `/presupuesto/{id}` | OK |

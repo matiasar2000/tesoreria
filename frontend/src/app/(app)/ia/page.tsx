@@ -1,10 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Bot, FileSearch, Send, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth";
+import { canUseAiAssistant } from "@/lib/permissions";
 import type { AiQueryRequest, AiQueryResponse, AiSource } from "@/types/api";
 import { Header } from "@/components/layout/header";
 import { Badge } from "@/components/ui/badge";
@@ -59,10 +62,13 @@ function sourceHref(source: AiSource): string | null {
 }
 
 export default function AiAssistantPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
   const [question, setQuestion] = useState(SUGGESTED_QUESTIONS[0]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [threadId, setThreadId] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<AiQueryResponse | null>(null);
+  const isAllowed = canUseAiAssistant(user?.role);
 
   const query = useMutation({
     mutationFn: (payload: AiQueryRequest) => api.post<AiQueryResponse>("/ai/query", payload),
@@ -71,6 +77,12 @@ export default function AiAssistantPage() {
       setThreadId(data.thread_id);
     },
   });
+
+  useEffect(() => {
+    if (!loading && !isAllowed) {
+      router.replace("/dashboard");
+    }
+  }, [isAllowed, loading, router]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -81,6 +93,10 @@ export default function AiAssistantPage() {
       year,
       thread_id: threadId,
     });
+  }
+
+  if (loading || !isAllowed) {
+    return null;
   }
 
   return (

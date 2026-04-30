@@ -25,6 +25,10 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
       - ENVIRONMENT=development
+      - LANGFUSE_ENABLED=${LANGFUSE_ENABLED:-false}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://host.docker.internal:3002}
       - WATCHFILES_FORCE_POLLING=true
       - WATCHFILES_IGNORE_PERMISSION_DENIED=true
     volumes:

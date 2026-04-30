@@ -62,6 +62,14 @@ http://localhost:3002
 
 Si no se configuraron variables `LANGFUSE_INIT_*`, crear el usuario, organizacion y proyecto desde la UI.
 
+Validacion local ejecutada:
+
+- Stack Langfuse v3 levantado en `http://localhost:3002`.
+- Healthcheck `GET /api/public/health` respondio `{"status":"OK","version":"3.163.0"}`.
+- Proyecto bootstrap creado: `Tesoreria IA Local`.
+- Backend ERP configurado con `LANGFUSE_ENABLED=true`.
+- Consulta IA read-only registrada en Langfuse con `erp_run_id` igual al `ai_runs.id`.
+
 ## Detener y limpiar
 
 Detener contenedores:
@@ -76,11 +84,14 @@ Eliminar tambien datos locales de Langfuse:
 docker compose -f docker-compose.langfuse.yml down -v
 ```
 
-## Integracion posterior con backend
+## Integracion con backend
 
-Cuando se instrumente el backend FastAPI, agregar variables al entorno del servicio `backend` o a `backend/.env` local:
+El backend ya incluye un wrapper opcional en `backend/app/services/ai_observability.py`. Si Langfuse no esta configurado, la aplicacion sigue funcionando con observabilidad no-op.
+
+Agregar variables al entorno del servicio `backend` o a `backend/.env` local:
 
 ```env
+LANGFUSE_ENABLED=true
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=http://host.docker.internal:3002
@@ -93,16 +104,25 @@ Notas:
 - Mantener `ai_runs.run_id` como correlacion principal del ERP y enviarlo a Langfuse como trace id, metadata o tag segun la libreria elegida.
 - Registrar en Langfuse datos tecnicos, no secretos ni payloads financieros completos innecesarios.
 - La UI `/ia` no debe leer desde Langfuse. Si se necesita mostrar auditoria al usuario de Tesoreria, usar `ai_runs` y `audit_log`.
+- El SDK se carga de forma lazy; si las variables no estan completas, no se intenta enviar trazas.
 
 Variables minimas esperadas por el SDK actual:
 
 ```env
+LANGFUSE_ENABLED=true
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=http://host.docker.internal:3002
 ```
 
-Segun la documentacion oficial actual, el SDK Python v3 requiere una plataforma Langfuse self-hosted compatible con version 3.125.0 o superior. El tag Docker `:3` mantiene el stack en la linea mayor v3; si mas adelante se fijan imagenes por version exacta, validar ese minimo antes de instrumentar el backend.
+Dependencias declaradas en `backend/requirements.txt`:
+
+```text
+langfuse>=3,<4
+langgraph>=1,<2
+```
+
+Segun la documentacion oficial actual, el SDK Python v3 usa `get_client()` y observaciones con `start_as_current_observation`. El tag Docker `:3` mantiene el stack self-hosted en la linea mayor v3; si mas adelante se fijan imagenes por version exacta, validar compatibilidad entre SDK y servidor antes de instrumentar produccion.
 
 ## Fuentes oficiales consultadas
 

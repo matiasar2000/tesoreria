@@ -1,3 +1,4 @@
+import importlib.util
 import uuid
 from types import SimpleNamespace
 
@@ -40,7 +41,31 @@ def test_policy_context_is_read_only() -> None:
 
     assert policy["mode"] == "read_only"
     assert policy["writes_allowed"] is False
+    assert policy["graph_version"] == "ia-read-only-v1"
+    assert policy["agent_behavior_version"] == "ia-read-only-v1.0.0"
+    assert policy["tool_policy"]["write_tools_allowed"] is False
+    assert set(policy["tool_policy"]["allowed_tools"]) == {
+        "get_budget_summary",
+        "search_expenses",
+        "get_bank_transactions",
+        "get_rendition_status",
+        "get_alerts",
+    }
     assert "no_financial_writes" in policy["guardrails"]
+    assert "tool_policy_gate" in policy["guardrails"]
+
+
+def test_ai_roles_separate_query_from_technical_audit() -> None:
+    tesorero = SimpleNamespace(id=uuid.uuid4(), role="tesorero", company_id=None)
+    equipo = SimpleNamespace(id=uuid.uuid4(), role="equipo_tesoreria", company_id=None)
+    director = SimpleNamespace(id=uuid.uuid4(), role="director_compania", company_id=uuid.uuid4())
+
+    assert ai_service.can_query_ai(tesorero) is True
+    assert ai_service.can_query_ai(equipo) is True
+    assert ai_service.can_query_ai(director) is False
+    assert ai_service.can_audit_ai(tesorero) is True
+    assert ai_service.can_audit_ai(equipo) is False
+    assert ai_service.can_audit_ai(director) is False
 
 
 def test_user_context_exposes_bank_scope_only_to_treasury_roles() -> None:
@@ -70,8 +95,19 @@ def test_bank_query_is_blocked_for_director_and_audited_without_financial_writes
 
     ai_run = next(item for item in db.added if isinstance(item, AiRun))
     audit_log = next(item for item in db.added if isinstance(item, AuditLog))
+    expected_runtime = "langgraph" if importlib.util.find_spec("langgraph") else "sequential"
     assert ai_run.policy_context["writes_allowed"] is False
+    assert ai_run.policy_context["graph_runtime"] == expected_runtime
+    assert ai_run.policy_context["agent_behavior_version"] == "ia-read-only-v1.0.0"
     assert ai_run.status == "bloqueado"
+    assert [step["node"] for step in ai_run.audit_trace] == [
+        "receive_request",
+        "initialize_harness",
+        "classify_intent",
+        "authorize_scope",
+        "finalize_response",
+        "log_audit",
+    ]
     assert audit_log.action == "ai_query"
     assert audit_log.entity_type == "ai_run"
     assert audit_log.entity_id == ai_run.id

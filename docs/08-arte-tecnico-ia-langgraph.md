@@ -175,6 +175,62 @@ Capa transversal:
 - Evaluacion y monitoreo.
 - Fallback ante errores.
 
+### 5.5 Capa de Agent Harness
+
+El **Agent Harness** es la capa de control que envuelve las llamadas al modelo, la ejecucion de tools y el avance del grafo. LangGraph orquesta el flujo; el harness impone presupuestos, politicas, validaciones y criterios de salida en cada paso.
+
+Separacion de responsabilidades:
+
+| Capa | Responsabilidad | No debe decidir |
+|---|---|---|
+| LLM | Interpretar texto, extraer campos, clasificar, resumir y redactar explicaciones | Permisos, aprobaciones, reglas financieras, escrituras |
+| LangGraph | Definir nodos, edges, checkpoints, interrupts y reanudacion de workflows | Si una regla de negocio se cumple, si una escritura es valida |
+| Agent Harness | Controlar presupuesto, modelo, tools, contexto, salidas, retries, fallback y anomalias | La verdad financiera ni la autorizacion final |
+| Backend determinista | Autenticacion, autorizacion, reglas de negocio, transacciones, auditoria y escrituras | Interpretacion libre de documentos o lenguaje natural |
+
+Responsabilidades del harness:
+
+- Seleccionar politica de modelo por flujo, riesgo y costo.
+- Aplicar limites de tokens, costo, tiempo, iteraciones y cantidad de tool calls.
+- Construir el contexto permitido antes de llamar al modelo.
+- Validar que la salida del modelo cumpla schemas estrictos.
+- Verificar que cada tool call este permitida para el flujo, rol, entidad y estado actual.
+- Deduplicar tool calls redundantes y bloquear loops de razonamiento/tool use.
+- Separar contenido no confiable de documentos, mensajes de usuario e instrucciones del sistema.
+- Detectar contradicciones entre respuesta IA, fuentes recuperadas y validadores.
+- Activar fallback, degradacion read-only o revision humana cuando el modelo falla o baja la confianza.
+- Registrar trazas tecnicas para Langfuse y trazas operativas en `ai_runs`/`audit_log`.
+
+Que controla:
+
+- **LLM:** proveedor/modelo permitido, temperatura, schema, prompt versionado, retries de salida invalida y fallback.
+- **Tools:** allowlist por flujo, argumentos permitidos, limites por run, idempotencia, permisos efectivos y bloqueo de escrituras sin checkpoint humano.
+- **Flujo:** maximo de pasos, rutas bloqueadas, escalamiento a humano, cancelacion por presupuesto o anomalia.
+- **Contexto:** seleccion, redaccion, frescura, volumen, fuentes obligatorias y exclusion de datos fuera de alcance.
+
+Que no controla:
+
+- No reemplaza RBAC ni permisos del backend.
+- No calcula reglas criticas de presupuesto como fuente de verdad.
+- No aprueba gastos, pagos, conciliaciones ni rendiciones.
+- No modifica registros financieros directamente.
+- No sustituye `audit_log` ni los logs obligatorios del ERP.
+
+Interaccion con LangGraph:
+
+- El harness se ejecuta como middleware o nodos deterministas alrededor de nodos IA y nodos tool.
+- Antes de cada llamada LLM: valida politica de modelo, presupuesto y contexto.
+- Antes de cada tool: valida allowlist, permisos, argumentos y estado del grafo.
+- Despues de cada nodo IA: valida schema, fuentes, confianza y contradicciones.
+- En edges condicionales: entrega flags como `requires_human_review`, `blocked_by_policy`, `retryable_error`, `degraded_mode` o `anomaly_detected`.
+
+Interaccion con backend y reglas deterministas:
+
+- El backend es la autoridad para permisos, reglas de negocio, transacciones y escritura.
+- Las tools deben llamar servicios existentes del backend, no consultas libres generadas por el modelo.
+- Toda escritura usa un `action_envelope` validado: entidad, accion, diff propuesto, fuentes, reglas ejecutadas, aprobador humano, idempotency key y version de comportamiento.
+- El backend re-ejecuta validadores criticos al aplicar la accion, aunque el grafo ya los haya ejecutado.
+
 ---
 
 ## 6. Estado del grafo
@@ -187,17 +243,27 @@ Estado conceptual:
 |---|---|
 | `run_id` | Identificador unico de la corrida IA |
 | `thread_id` | Continuidad de conversacion o workflow |
+| `graph_version` | Version del grafo o subgrafo ejecutado |
+| `agent_behavior_version` | Version compuesta de prompts, schemas, tools, politicas y modelo |
 | `user_context` | Usuario, rol, compania asociada y permisos efectivos |
 | `intent` | Intencion clasificada: consulta, clasificacion, documento, conciliacion, rendicion, alerta |
 | `input_payload` | Pregunta, documento, gasto, movimiento bancario o evento que inicio el flujo |
+| `model_policy` | Modelo primario, fallback permitido, temperatura, schema y limites aplicables |
+| `execution_budget` | Limites de tokens, costo, duracion, iteraciones y tool calls |
+| `context_budget` | Presupuesto de contexto, reglas de seleccion, fuentes incluidas y datos excluidos |
+| `tool_policy` | Allowlist por flujo, argumentos permitidos, permisos y modo read/write |
 | `domain_context` | Datos internos recuperados: partidas, gastos, documentos, bancos, ingresos, rendiciones |
 | `policy_context` | Reglas aplicables: IMM, umbrales, presupuesto aprobado, restricciones de fondos |
 | `tool_calls` | Herramientas llamadas, argumentos permitidos y resultado resumido |
 | `findings` | Hallazgos: riesgos, inconsistencias, duplicados, datos extraidos |
+| `risk_flags` | Flags del harness: prompt injection, source mismatch, loop, costo alto, baja confianza |
 | `confidence` | Confianza por resultado relevante |
 | `proposed_actions` | Acciones sugeridas, nunca aplicadas automaticamente si escriben datos |
+| `action_envelope` | Paquete validado para accion sensible: diff, fuentes, reglas, aprobador e idempotencia |
 | `human_review` | Decision humana, comentario, editor y fecha |
 | `final_response` | Respuesta visible al usuario |
+| `fallback_path` | Fallback aplicado: modelo alternativo, modo degradado, manual o bloqueo |
+| `eval_tags` | Tags para evals y monitoreo: modulo, caso, version, riesgo y criticidad |
 | `audit_trace` | Nodos visitados, tiempos, modelo, errores y checkpoints |
 
 Estados de ciclo de vida:
@@ -206,13 +272,19 @@ Estados de ciclo de vida:
 |---|---|
 | `iniciado` | El usuario o sistema disparo un flujo |
 | `autorizando` | Se verifica rol, alcance y permisos |
+| `configurando_harness` | Se fija version, modelo, presupuesto, allowlist y politica de contexto |
 | `contextualizando` | Se recopilan datos internos necesarios |
 | `analizando` | Se ejecutan modelo, validadores o detectores |
 | `validando` | Se contrastan hallazgos contra reglas duras |
+| `reintentando` | Se reintenta un paso por error transitorio o salida estructurada reparable |
+| `degradado` | El flujo continua en modo limitado, normalmente read-only o sin LLM |
+| `requiere_aclaracion` | La entrada o el contexto son insuficientes para responder con evidencia |
 | `esperando_revision` | Hay una accion sensible o baja confianza |
 | `listo_para_aplicar` | La persona aprobo la propuesta |
 | `aplicado` | Se ejecuto una tool de escritura controlada |
 | `bloqueado` | Una politica impide continuar |
+| `cancelado_por_limite` | El harness detuvo la corrida por costo, tiempo, iteraciones o tool calls |
+| `error_agente` | Error de comportamiento IA: schema invalido, tool no permitida, loop o contradiccion |
 | `finalizado` | Se entrego respuesta o resultado final |
 | `fallido` | Error recuperable o tecnico registrado |
 
@@ -224,20 +296,29 @@ Estados de ciclo de vida:
 |---|---|---|---|
 | `receive_request` | Determinista | Normaliza entrada del usuario, evento o documento | No |
 | `authorize_scope` | Determinista | Aplica rol, compania, periodo fiscal y permisos | No |
+| `initialize_harness` | Harness | Fija version, presupuesto, politica de modelo, allowlist y limites del flujo | No |
+| `select_model_policy` | Harness | Selecciona modelo primario, fallback, temperatura y schema por riesgo/costo | No |
 | `classify_intent` | IA estructurada | Identifica tipo de tarea y entidades mencionadas | No |
+| `validate_llm_output` | Determinista | Valida JSON/schema, campos obligatorios, fuentes y confianza declarada | No |
 | `route_intent` | Condicional | Decide subflujo: consulta, gasto, documento, banco, rendicion, alerta | No |
+| `assemble_context` | Harness | Selecciona contexto minimo, fuentes, redacciones y datos excluidos | No |
 | `retrieve_context` | Tool read-only | Obtiene datos minimos necesarios del ERP | No |
+| `tool_policy_gate` | Harness | Autoriza o bloquea tool calls por flujo, rol, entidad, argumentos y presupuesto | No |
 | `extract_document_data` | IA/OCR | Extrae datos de facturas, boletas, cotizaciones, actas o cartolas | No |
 | `validate_business_rules` | Determinista | Ejecuta reglas duras del dominio | No |
 | `analyze_risk` | Hibrido | Evalua duplicados, inconsistencias, montos inusuales y omisiones | No |
+| `detect_agent_anomaly` | Harness | Detecta loops, tool abuse, costo anormal, contradicciones y source mismatch | No |
 | `draft_answer` | IA | Redacta respuesta con fuentes y advertencias | No |
 | `draft_action` | IA + reglas | Prepara una propuesta aplicable: clasificacion, match, alerta o borrador | No |
+| `build_action_envelope` | Determinista | Construye diff aplicable con fuentes, reglas, aprobador requerido e idempotencia | No |
 | `human_checkpoint` | Interrupt | Pausa para aprobar, editar o rechazar | No |
 | `apply_approved_action` | Tool write-gated | Ejecuta accion previamente aprobada | Si |
+| `fallback_or_degrade` | Condicional | Cambia de modelo, pasa a modo read-only/manual o bloquea con explicacion | No |
+| `record_eval_signal` | Determinista | Registra metricas, labels y senales para evals continuas | Si, solo auditoria IA |
 | `log_audit` | Determinista | Registra traza, tools, decision y resultado | Si, solo auditoria |
 | `finalize_response` | Determinista | Entrega resultado final al usuario | No |
 
-Regla de diseno: los nodos que escriben deben ser pocos, idempotentes y siempre posteriores a `human_checkpoint`.
+Regla de diseno: los nodos que escriben deben ser pocos, idempotentes y siempre posteriores a `human_checkpoint`. Ademas, ningun nodo IA puede llamar tools directamente; toda llamada pasa por `tool_policy_gate` y toda salida IA que afecte ruteo o propuesta pasa por `validate_llm_output`.
 
 ---
 
@@ -246,25 +327,36 @@ Regla de diseno: los nodos que escriben deben ser pocos, idempotentes y siempre 
 ```mermaid
 flowchart TD
     A[Inicio] --> B[Normalizar solicitud]
-    B --> C[Autorizar alcance]
+    B --> B1[Inicializar harness]
+    B1 --> C[Autorizar alcance]
     C -->|Sin permiso| Z[Bloquear y explicar]
-    C --> D[Clasificar intencion]
-    D --> E[Recuperar contexto]
-    E --> F[Validar reglas duras]
-    F -->|Bloqueo normativo o negocio| Z
-    F --> G[Analizar con IA o validadores]
-    G --> H[Evaluar confianza y sensibilidad]
-    H -->|Solo lectura y confianza suficiente| I[Responder con fuentes]
-    H -->|Faltan datos| J[Pedir aclaracion]
-    H -->|Accion sensible o baja confianza| K[Revision humana]
-    K -->|Rechaza| L[Cerrar sin aplicar]
-    K -->|Edita o aprueba| M[Aplicar accion aprobada]
-    M --> N[Auditar resultado]
-    I --> N
-    J --> N
-    L --> N
-    Z --> N
-    N --> O[Fin]
+    C --> D[Seleccionar politica de modelo]
+    D --> E[Clasificar intencion]
+    E --> E1[Validar salida IA]
+    E1 -->|Salida invalida reparable| R[Retry controlado]
+    E1 -->|Salida invalida no reparable| Y[Fallback o modo degradado]
+    E1 --> F[Ensamblar contexto permitido]
+    F --> G[Gate de tools y recuperar contexto]
+    G --> H[Validar reglas duras]
+    H -->|Bloqueo normativo o negocio| Z
+    H --> I[Analizar con IA o validadores]
+    I --> I1[Detectar anomalias del agente]
+    I1 -->|Loop costo o contradiccion| Y
+    I1 --> J[Evaluar confianza y sensibilidad]
+    J -->|Solo lectura y confianza suficiente| K[Responder con fuentes]
+    J -->|Faltan datos| L[Pedir aclaracion]
+    J -->|Accion sensible o baja confianza| M[Construir action envelope]
+    M --> N[Revision humana]
+    N -->|Rechaza| O[Cerrar sin aplicar]
+    N -->|Edita o aprueba| P[Aplicar accion aprobada]
+    P --> Q[Auditar y registrar senales eval]
+    K --> Q
+    L --> Q
+    O --> Q
+    Z --> Q
+    Y --> Q
+    R --> E
+    Q --> S[Fin]
 ```
 
 Este workflow no obliga a que todo pase por un agente autonomo. Muchos caminos pueden ser deterministas y solo invocar el modelo en nodos especificos.
@@ -441,6 +533,46 @@ Estas tools requieren `human_checkpoint` previo y auditoria obligatoria.
 | `create_ai_alert` | Crear alerta derivada de analisis | Debe incluir fuente |
 | `create_rendition_draft` | Crear borrador de rendicion | No presenta oficialmente |
 
+### 10.5 Registro y politicas de tools
+
+Cada tool debe registrarse con metadatos ejecutables, no solo documentales:
+
+| Campo | Uso operacional |
+|---|---|
+| `tool_name` | Nombre estable y versionado |
+| `tool_version` | Version compatible con `agent_behavior_version` |
+| `mode` | `read_only`, `validator`, `analysis`, `draft`, `write_gated` |
+| `allowed_flows` | Subflujos donde se puede usar |
+| `required_roles` | Roles minimos y permisos efectivos |
+| `input_schema` | Schema estricto de argumentos permitidos |
+| `output_schema` | Schema estricto de resultado resumible y auditable |
+| `timeout_ms` | Timeout especifico por tool |
+| `max_calls_per_run` | Limite por corrida |
+| `idempotent` | Requisito obligatorio para escritura |
+| `sensitive_entities` | Entidades protegidas que requieren revision o redaccion |
+
+Politicas obligatorias:
+
+- El modelo nunca recibe una tool generica de SQL, shell, HTTP libre o escritura arbitraria.
+- La allowlist de tools se calcula por flujo antes de llamar al modelo.
+- Toda tool valida rol y alcance en backend, aunque el harness ya lo haya validado.
+- Toda llamada repite `run_id`, `thread_id`, `user_context`, `agent_behavior_version` y `idempotency_key` cuando corresponda.
+- El harness bloquea llamadas con argumentos fuera de schema, entidades fuera de alcance o cambios no representados en `action_envelope`.
+- Se deduplican llamadas equivalentes dentro de una misma corrida para evitar loops y costos innecesarios.
+- Una tool de escritura no puede ser llamada en el mismo nodo donde se genero la propuesta IA.
+- Tools de escritura deben soportar dry-run o prevalidacion antes de aplicar cambios.
+
+Control de loops y abuso:
+
+| Senal | Accion del harness |
+|---|---|
+| Misma tool con mismos argumentos mas de 1 vez | Reusar resultado cacheado o bloquear repeticion |
+| Mas de 3 tools de lectura en una consulta simple | Re-evaluar plan o pedir aclaracion |
+| Mas de 2 intentos de reparacion de schema | Pasar a fallback o revision humana |
+| Tool propuesta fuera de allowlist | Bloquear, registrar `error_agente` y no ejecutar |
+| Argumentos amplios sin filtro temporal/rol/entidad | Rechazar y pedir parametros especificos |
+| Modelo insiste en escribir sin checkpoint | Bloquear corrida y registrar anomalia critica |
+
 ---
 
 ## 11. Guardrails
@@ -482,16 +614,116 @@ No se pueden desactivar por prompt.
 
 ### 11.4 Guardrails operacionales
 
-- Limite de iteraciones por flujo.
-- Timeouts por tool.
-- Retries solo para errores transitorios.
+- Limite de iteraciones por flujo y por subgrafo.
+- Timeouts diferenciados por nodo y por tool.
+- Retries solo para errores transitorios o salidas estructuradas reparables.
 - Idempotency key para tools de escritura.
-- Registro de costo aproximado por corrida.
-- Fallback manual si el proveedor IA falla.
-- Versionar prompts y schemas de salida.
-- Evaluar cambios de prompts antes de produccion.
+- Registro de costo aproximado por corrida y por nodo.
+- Fallback manual o modo degradado si el proveedor IA falla.
+- Versionar prompts, schemas, tools, grafos y politicas de modelo.
+- Evaluar cambios de prompts, tools, modelo o grafo antes de produccion.
+- Cancelar corridas que excedan costo, tiempo, tokens, tool calls o anomalias.
 
-### 11.5 Guardrails de lenguaje
+Limites iniciales recomendados:
+
+| Tipo de nodo | Timeout inicial | Retry | Observacion |
+|---|---:|---:|---|
+| `authorize_scope` | 2s | 0 | Si falla, bloquear por seguridad |
+| `classify_intent` | 5s | 1 | Reintento solo por schema invalido o timeout transitorio |
+| `retrieve_context` | 5s por tool | 1 | Sin reintento si la consulta no esta autorizada |
+| `extract_document_data` | 45s | 1 | En documentos pesados, pasar a cola asincrona |
+| `validate_business_rules` | 5s | 0 | No se reintentan fallas de regla; se explican |
+| `analyze_risk` | 15s | 1 | Preferir calculos deterministas antes que LLM |
+| `draft_answer` | 8s | 1 | Si falla, responder con datos estructurados sin redaccion IA |
+| `apply_approved_action` | 10s | 0 | Escritura idempotente; retry solo manual/operacional |
+| `log_audit` | 5s | 2 | Si falla auditoria, no confirmar escritura como completada |
+
+Presupuesto por corrida:
+
+- `max_graph_steps`: 12 para flujos read-only, 18 para flujos con revision humana.
+- `max_llm_calls`: 2 en consultas simples, 4 en documentos/conciliacion.
+- `max_tool_calls`: 5 en consultas, 10 en rendiciones o conciliaciones.
+- `max_cost_usd`: configurable por modulo y rol; al 80% se activa advertencia interna.
+- `max_context_tokens`: presupuesto por flujo, no por modelo. Si se excede, se resume o se pide aclaracion.
+
+Estrategia de retry:
+
+- Error transitorio de red/proveedor: retry con backoff exponencial y jitter.
+- Salida JSON invalida: un intento de reparacion con schema y error concreto; si falla, `error_agente`.
+- Conflicto con validador determinista: no retry; gana el validador.
+- Baja confianza: no retry automatico salvo que falte contexto recuperable.
+- Error de permiso o politica: no retry; bloqueo auditado.
+- Escritura: no retry automatico desde el agente; usar idempotencia y manejo transaccional del backend.
+
+Estrategia de fallback de modelo:
+
+| Escenario | Fallback |
+|---|---|
+| Modelo primario no disponible | Modelo secundario aprobado para el mismo schema |
+| Modelo secundario falla | Modo degradado read-only o revision humana |
+| Extraccion documental incierta | OCR/parseo alternativo y revision humana |
+| Clasificacion con baja confianza | Mostrar candidatos deterministas y pedir confirmacion |
+| Redaccion falla | Respuesta estructurada basada en fuentes sin texto generativo |
+| Costo excedido | Cortar flujo, explicar limite y permitir ejecucion manual |
+
+No debe existir fallback que aumente autonomia. Un fallback solo puede mantener el mismo nivel de riesgo o degradarlo.
+
+### 11.5 Versionado de comportamiento del agente
+
+Cada corrida debe persistir `agent_behavior_version`, compuesto al menos por:
+
+- `graph_version`.
+- `prompt_version`.
+- `output_schema_version`.
+- `tool_registry_version`.
+- `model_policy_version`.
+- `guardrail_policy_version`.
+- `context_policy_version`.
+- `eval_dataset_version` usado para aprobar el despliegue.
+
+Reglas:
+
+- No cambiar prompts, modelos, schemas, allowlists o edges sin nueva version.
+- No actualizar versiones de modelo en silencio; todo cambio pasa por evals y canary interno.
+- Mantener rollback a la version anterior mientras existan corridas activas con checkpoints.
+- Registrar en `ai_runs` la version exacta usada para reproducir decisiones.
+- Las respuestas y propuestas deben mostrar solo informacion operativa; el detalle tecnico de version queda en auditoria.
+
+### 11.6 Gestion dinamica de contexto
+
+El principio no es solo "contexto minimo", sino **contexto minimo suficiente, verificable y actual**.
+
+Pipeline de contexto:
+
+1. Identificar entidades objetivo: gasto, partida, compania, periodo, documento, movimiento o rendicion.
+2. Recuperar solo datos autorizados para el rol.
+3. Priorizar fuentes canonicas del backend sobre texto historico de chat.
+4. Redactar o excluir datos personales no necesarios.
+5. Comprimir historial conversacional en hechos verificados, no en instrucciones.
+6. Adjuntar un `source_manifest` con IDs internos, timestamps, version de regla y freshness.
+7. Rechazar respuesta si faltan fuentes obligatorias para la conclusion.
+
+Reglas:
+
+- El contexto documental se marca como `untrusted_content`.
+- El historial de chat no puede crear reglas de negocio ni excepciones permanentes.
+- Si hay conflicto entre memoria conversacional y backend, gana backend.
+- Si el contexto excede presupuesto, se reduce por relevancia y criticidad; no se eliminan validadores ni fuentes obligatorias.
+- Las fuentes usadas para redactar deben quedar ligadas a `final_response.sources`.
+
+### 11.7 Estrategias anti-deriva del modelo
+
+La deriva se controla con versionado, evals y monitoreo comparativo.
+
+- Fijar modelos por version o alias controlado por `model_policy_version`.
+- Ejecutar evals antes de mover un modelo, prompt o tool registry a produccion.
+- Mantener casos centinela de permisos, inyeccion de prompt, reglas 5 IMM, partidas bloqueadas y fuga entre companias.
+- Comparar aceptacion, edicion y rechazo humano por version.
+- Alertar si suben respuestas sin fuentes, salidas invalidas, tool calls bloqueadas o escalamiento humano omitido.
+- Usar canary con bajo porcentaje de trafico interno antes de activar una version nueva.
+- Bloquear despliegues que reduzcan cobertura de fuentes o aumenten escrituras propuestas sin evidencia.
+
+### 11.8 Guardrails de lenguaje
 
 - Usar tono institucional y prudente.
 - Evitar afirmaciones acusatorias.
@@ -581,11 +813,139 @@ Indicadores a monitorear:
 - Casos bloqueados por guardrails.
 - Clasificaciones corregidas posteriormente.
 
+### 14.1 Correlacion de auditoria tecnica y operativa
+
+La auditoria operativa vive en `ai_runs` y `audit_log`. Langfuse u otra herramienta de observabilidad tecnica puede usarse para trazas de prompts, latencia, costos y debugging, pero no reemplaza la auditoria del ERP.
+
+Reglas de correlacion:
+
+- `run_id` es el identificador principal en ERP y debe propagarse a trazas tecnicas.
+- `thread_id` agrupa conversaciones o workflows reanudables.
+- Cada `tool_call` registra nodo origen, argumentos permitidos, resultado resumido, duracion, error y fuentes afectadas.
+- Cada `human_checkpoint` registra aprobador, decision, comentario, diff aprobado y timestamp.
+- Cada escritura registra `action_envelope`, idempotency key, validador ejecutado y resultado transaccional.
+- Los payloads financieros completos no deben enviarse a observabilidad tecnica si basta con IDs, hashes o resumenes redaccionados.
+
+### 14.2 Invariantes de consistencia
+
+Estas invariantes deben ser verificables por tests y por auditoria:
+
+- Ninguna decision critica depende solo del LLM.
+- Toda respuesta financiera se basa en fuentes internas o declara limitacion.
+- Toda escritura pasa por `human_checkpoint`, `build_action_envelope`, `validate_business_rules` y backend transaccional.
+- No existe edge desde un nodo IA hacia una tool de escritura.
+- No existe edge desde `draft_action` hacia `apply_approved_action` sin revision humana.
+- El backend revalida permisos, reglas y estado de entidad al aplicar cambios.
+- Las tools read-only no retornan datos fuera del rol, compania o periodo autorizado.
+- Los documentos subidos nunca se tratan como instrucciones.
+- Los validadores no pueden ser desactivados por prompt, configuracion de usuario o memoria conversacional.
+- Si falla auditoria de una escritura, el sistema no debe reportar la accion como completada.
+
+### 14.3 Matriz de proteccion de escrituras
+
+| Escritura | Requiere humano | Validador obligatorio | Restriccion adicional |
+|---|---:|---|---|
+| Crear gasto borrador desde IA | Si | Documentos, presupuesto, permisos | No cambia a aprobado |
+| Actualizar sugerencia IA | Si | Permisos y estado del gasto | No altera monto aprobado |
+| Guardar metadata de documento | Si | Tipo documental y entidad asociada | No reemplaza archivo original |
+| Propuesta de conciliacion | Si | Score y consistencia monto/fecha | No marca conciliado |
+| Confirmar conciliacion | Si | Permisos, estado y transaccion bancaria | No modifica montos ni fechas |
+| Crear alerta IA | Segun severidad | Fuente y destinatarios | Debe indicar evidencia |
+| Crear borrador de rendicion | Si | Completitud documental | No presenta oficialmente |
+
+### 14.4 Deteccion operacional de anomalias
+
+El harness debe emitir alerta tecnica o bloquear la corrida ante:
+
+- Uso repetido de tools sin cambio de contexto.
+- Intentos de llamar tools fuera de allowlist.
+- Incremento repentino de costo o tokens frente al promedio del flujo.
+- Respuestas sin fuentes en dominios financieros.
+- Diferencia entre monto extraido y monto de registro sin advertencia.
+- Propuesta que contradice un validador determinista.
+- Baja confianza sin escalamiento humano.
+- Prompt injection detectado en documento o mensaje.
+- Aumento de rechazos humanos para una misma version.
+
 ---
 
-## 15. Evaluacion antes de produccion
+## 15. Evaluacion continua del agente
 
-La IA debe probarse con casos dorados del dominio, no solo con prompts genericos.
+La IA debe evaluarse como comportamiento versionado, no como prompts aislados. Cada cambio de modelo, prompt, schema, tool, grafo o guardrail debe pasar por suites automaticas antes de produccion y seguir monitoreado despues del despliegue.
+
+### 15.1 Metricas automaticas
+
+| Metrica | Objetivo |
+|---|---|
+| `schema_valid_rate` | Porcentaje de salidas que cumplen schema sin reparacion |
+| `source_coverage_rate` | Respuestas financieras con fuentes internas suficientes |
+| `permission_leak_rate` | Debe ser 0; intentos de acceso fuera de rol bloqueados |
+| `write_without_checkpoint_rate` | Debe ser 0 |
+| `validator_override_rate` | Debe ser 0; IA nunca supera validador determinista |
+| `tool_block_rate` | Tool calls bloqueadas por allowlist/schema/politica |
+| `human_edit_rate` | Proporcion de sugerencias editadas antes de aceptar |
+| `human_reject_rate` | Proporcion de sugerencias rechazadas |
+| `low_confidence_escalation_rate` | Casos bajo umbral que escalan correctamente |
+| `cost_per_successful_run` | Costo por corrida finalizada util |
+| `latency_p95_by_flow` | Latencia p95 por subflujo |
+| `regression_failures` | Casos dorados que cambiaron resultado esperado |
+
+### 15.2 Casos de prueba versionados
+
+Los casos deben vivir como fixtures versionados, por ejemplo en `tests/ai/golden/`, con esta estructura conceptual:
+
+| Campo | Proposito |
+|---|---|
+| `case_id` | Identificador estable |
+| `flow` | Subflujo evaluado |
+| `user_context` | Rol, compania y permisos simulados |
+| `input_payload` | Pregunta, documento, gasto o movimiento |
+| `fixtures` | Datos canonicos del ERP usados por tools simuladas |
+| `expected_tools` | Tools permitidas/esperadas y tools prohibidas |
+| `expected_sources` | Fuentes internas minimas que deben citarse |
+| `expected_findings` | Hallazgos esperados |
+| `expected_state` | Estado final: finalizado, bloqueado, revision humana, etc. |
+| `must_not_write` | Confirmacion explicita de que no hay escritura |
+| `risk_tags` | Permisos, prompt injection, 5 IMM, fondos restringidos, etc. |
+
+### 15.3 Validacion de outputs
+
+La evaluacion no debe depender solo de comparar texto.
+
+- Validar schemas Pydantic/JSON de cada nodo IA.
+- Validar que cada conclusion tenga fuente o limitacion explicita.
+- Validar que las propuestas de escritura tengan `action_envelope`.
+- Validar que los IDs citados existan en fixtures o backend.
+- Validar que no se inventen montos, reglas, proveedores, partidas ni estados.
+- Validar que los bloqueos se expliquen sin sugerir bypass.
+- Validar que el texto final no contradiga `validate_business_rules`.
+
+### 15.4 Deteccion de regresiones
+
+Gates minimos antes de produccion:
+
+- 100% de casos de permisos y fuga de datos pasan.
+- 100% de casos de escritura sin checkpoint permanecen bloqueados.
+- 100% de reglas duras criticas prevalecen sobre la IA.
+- 0 salidas sin schema valido en nodos que alimentan decisiones.
+- Sin aumento no justificado de costo p95 ni latencia p95.
+- Sin caida de `source_coverage_rate` en consultas financieras.
+
+Las regresiones se comparan contra `agent_behavior_version` anterior. Si cambia el texto pero no cambia el comportamiento, se registra como diff no bloqueante. Si cambia ruta, tool, fuente, estado final o propuesta aplicable, requiere aprobacion tecnica.
+
+### 15.5 Feedback loop desde usuarios
+
+La UI debe capturar senales estructuradas:
+
+- Sugerencia aceptada sin cambios.
+- Sugerencia editada.
+- Sugerencia rechazada.
+- Motivo de rechazo: fuente insuficiente, clasificacion erronea, riesgo omitido, lenguaje poco claro, dato desactualizado, permiso incorrecto.
+- Correccion posterior de un gasto, conciliacion o rendicion originada en sugerencia IA.
+
+Estas senales alimentan evals, no reglas automaticas. Ninguna preferencia aprendida por feedback puede saltarse permisos, reglas de negocio ni revision humana.
+
+### 15.6 Suites de dominio
 
 Suites sugeridas:
 
@@ -736,6 +1096,13 @@ Ejemplo:
 | Baja adopcion por desconfianza | Medio | Mostrar evidencia, permitir editar, auditar decisiones |
 | Cambian reglas normativas | Medio | Reglas parametrizadas y evaluaciones de regresion |
 | Dependencia excesiva de proveedor IA | Medio | Tools deterministas, fallback manual, arquitectura model-agnostic |
+| Loop de tool use o razonamiento | Alto | `tool_policy_gate`, limite de pasos, deduplicacion y `detect_agent_anomaly` |
+| Drift por cambio de modelo o prompt | Alto | `agent_behavior_version`, evals, canary y rollback |
+| Salida estructurada invalida alimenta un edge | Alto | `validate_llm_output` obligatorio antes de ruteo o propuesta |
+| Fallback aumenta autonomia sin control | Alto | Fallback solo mantiene o reduce riesgo; modo degradado read-only/manual |
+| Contexto insuficiente produce conclusion convincente | Alto | `source_manifest`, source coverage y bloqueo si faltan fuentes obligatorias |
+| Observabilidad tecnica expone datos sensibles | Medio | Redaccion, IDs/hashes y separacion entre Langfuse y auditoria ERP |
+| Escritura evita validador por ruta alternativa | Alto | Invariantes de grafo, tests de edges y revalidacion transaccional backend |
 
 ---
 

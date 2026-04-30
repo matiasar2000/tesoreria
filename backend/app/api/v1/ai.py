@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.core.permissions import require_tesorero, require_tesorero_or_equipo
 from app.database import get_db
 from app.models.user import User
 from app.schemas.ai import AiQueryRequest, AiQueryResponse, AiRunListItem, AiRunResponse
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/ai", tags=["IA"])
 def query_ai(
     data: AiQueryRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_tesorero_or_equipo),
 ) -> AiQueryResponse:
     return ai_service.run_read_only_query(db, data, current_user)
 
@@ -29,7 +29,7 @@ def list_ai_runs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_tesorero),
 ) -> PaginatedResponse[AiRunListItem]:
     return ai_service.list_ai_runs(
         db,
@@ -45,6 +45,6 @@ def list_ai_runs(
 def get_ai_run(
     run_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_tesorero),
 ) -> AiRunResponse:
     return ai_service.get_ai_run(db, run_id, current_user)

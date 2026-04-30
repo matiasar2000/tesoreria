@@ -20,6 +20,15 @@ from app.schemas.ai import (
     AiToolCall,
 )
 from app.schemas.common import PaginatedResponse
+from app.services.ai_graph import (
+    AGENT_BEHAVIOR_VERSION,
+    GRAPH_VERSION,
+    READ_ONLY_TOOL_ALLOWLIST,
+    ReadOnlyGraphHandlers,
+    ReadOnlyGraphState,
+    execute_read_only_graph,
+)
+from app.services.ai_observability import observe_ai_run, update_ai_observation
 from app.services.ai_tools import (
     ReadOnlyToolContext,
     format_currency,
@@ -32,8 +41,9 @@ from app.services.ai_tools import (
     get_rendition_context,
 )
 
-BANK_ROLES = {"tesorero", "equipo_tesoreria"}
-TREASURY_ROLES = {"tesorero", "equipo_tesoreria", "superintendente", "directorio"}
+AI_QUERY_ROLES = {"tesorero", "equipo_tesoreria"}
+AI_AUDIT_ROLES = {"tesorero"}
+BANK_ROLES = AI_QUERY_ROLES
 
 
 def run_read_only_query(db: Session, data: AiQueryRequest, current_user: User) -> AiQueryResponse:
@@ -56,45 +66,48 @@ def run_read_only_query(db: Session, data: AiQueryRequest, current_user: User) -
     db.add(run)
     db.flush()
 
-    _trace(trace, "receive_request", "completed")
-    intent = _classify_intent(data.question)
-    run.intent = intent
-    run.status = "autorizando"
-    _trace(trace, "authorize_scope", "completed")
+    handlers = ReadOnlyGraphHandlers(
+        trace=_trace,
+        classify_intent=_classify_intent,
+        get_blocking_finding=_get_blocking_finding,
+        retrieve_context=_retrieve_context,
+        draft_answer=_draft_answer,
+        dump_findings=_dump_findings,
+        dump_tool_calls=_dump_tool_calls,
+        dump_actions=_dump_actions,
+    )
+    initial_state = ReadOnlyGraphState(
+        db=db,
+        run=run,
+        user=current_user,
+        year=year,
+        question=data.question,
+        trace=trace,
+        tool_calls=tool_calls,
+        findings=findings,
+        sources=sources,
+        proposed_actions=proposed_actions,
+    )
 
-    blocking_finding = _get_blocking_finding(intent, current_user)
-    if blocking_finding:
-        findings.append(blocking_finding)
-        answer = blocking_finding.message
-        run.status = "bloqueado"
-        run.findings = _dump_findings(findings)
-        run.final_response = answer
-        run.confidence = 1
-        run.audit_trace = trace
-        run.completed_at = datetime.now(timezone.utc)
-        _create_audit_log(db, run, current_user)
-        db.commit()
-        return _to_query_response(run, sources, findings, proposed_actions, tool_calls)
+    with observe_ai_run(
+        run,
+        current_user,
+        year=year,
+        graph_version=GRAPH_VERSION,
+        agent_behavior_version=AGENT_BEHAVIOR_VERSION,
+    ) as observation:
+        final_state = execute_read_only_graph(initial_state, handlers)
+        update_ai_observation(
+            observation,
+            run,
+            tool_count=len(final_state.get("tool_calls", [])),
+            finding_count=len(final_state.get("findings", [])),
+        )
 
-    run.status = "contextualizando"
-    _trace(trace, "classify_intent", "completed", {"intent": intent})
-    domain_context = _retrieve_context(db, intent, year, current_user, tool_calls, sources, findings)
-
-    run.status = "analizando"
-    _trace(trace, "retrieve_context", "completed", {"tools": [call.name for call in tool_calls]})
-    answer, confidence, proposed_actions = _draft_answer(intent, domain_context, year, findings)
-    _trace(trace, "draft_answer", "completed", {"confidence": confidence})
-
-    run.status = "finalizado"
-    run.domain_context = domain_context
-    run.tool_calls = _dump_tool_calls(tool_calls)
-    run.findings = _dump_findings(findings)
-    run.confidence = confidence
-    run.proposed_actions = _dump_actions(proposed_actions)
-    run.final_response = answer
-    run.audit_trace = trace
-    run.completed_at = datetime.now(timezone.utc)
-
+    sources = final_state.get("sources", sources)
+    findings = final_state.get("findings", findings)
+    proposed_actions = final_state.get("proposed_actions", proposed_actions)
+    tool_calls = final_state.get("tool_calls", tool_calls)
     _create_audit_log(db, run, current_user)
     db.commit()
     db.refresh(run)
@@ -102,11 +115,10 @@ def run_read_only_query(db: Session, data: AiQueryRequest, current_user: User) -
 
 
 def get_ai_run(db: Session, run_id: uuid.UUID, current_user: User) -> AiRunResponse:
+    _ensure_can_audit_ai(current_user)
     run = db.query(AiRun).filter(AiRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Corrida IA no encontrada.")
-    if run.user_id != current_user.id and current_user.role not in TREASURY_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para ver esta corrida IA.")
     return AiRunResponse.model_validate(run)
 
 
@@ -119,9 +131,8 @@ def list_ai_runs(
     page: int = 1,
     page_size: int = 20,
 ) -> PaginatedResponse[AiRunListItem]:
+    _ensure_can_audit_ai(current_user)
     query = db.query(AiRun)
-    if current_user.role not in TREASURY_ROLES:
-        query = query.filter(AiRun.user_id == current_user.id)
     if intent:
         query = query.filter(AiRun.intent == intent)
     if run_status:
@@ -150,13 +161,51 @@ def _build_policy_context() -> dict[str, Any]:
     return {
         "mode": "read_only",
         "writes_allowed": False,
+        "graph_version": GRAPH_VERSION,
+        "agent_behavior_version": AGENT_BEHAVIOR_VERSION,
+        "model_policy": {
+            "provider": "deterministic",
+            "model": "rules-engine",
+            "temperature": 0,
+            "fallback": "read_only_structured_response",
+        },
+        "execution_budget": {
+            "max_graph_steps": 12,
+            "max_llm_calls": 0,
+            "max_tool_calls": 5,
+            "max_retry_attempts": 0,
+        },
+        "context_budget": {
+            "strategy": "minimum_sufficient_verified_context",
+            "requires_internal_sources": True,
+        },
+        "tool_policy": {
+            "mode": "read_only",
+            "allowed_tools": READ_ONLY_TOOL_ALLOWLIST,
+            "write_tools_allowed": False,
+        },
         "guardrails": [
             "no_financial_writes",
             "role_filtered_tools",
             "source_based_answers",
             "human_review_required_for_sensitive_actions",
+            "tool_policy_gate",
+            "agent_behavior_versioning",
         ],
     }
+
+
+def can_query_ai(user: User) -> bool:
+    return user.role in AI_QUERY_ROLES
+
+
+def can_audit_ai(user: User) -> bool:
+    return user.role in AI_AUDIT_ROLES
+
+
+def _ensure_can_audit_ai(user: User) -> None:
+    if not can_audit_ai(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permisos para auditar corridas IA.")
 
 
 def _classify_intent(question: str) -> str:
