@@ -378,3 +378,5 @@ Validacion de cierre ejecutada el 2026-04-27:
 Observacion: `npm run lint` global queda limpio despues de corregir deuda previa en `banco`, `rendiciones`, `auth`, `alertas` y `dashboard`.
 
 Resultado: **IA-0 cerrado y aceptado funcionalmente** como asistente read-only auditable.
+
+El cierre formal queda registrado en `docs/12-cierre-formal-ia-0.md`.

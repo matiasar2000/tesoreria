@@ -371,7 +371,7 @@ Registro minimo:
 
 | Fase | Objetivo | Resultado |
 |---|---|---|
-| IA-0 | Fundacion read-only, auditoria, permisos y tools seguras | Consultas sin riesgo de modificar datos |
+| IA-0 | Fundacion read-only, auditoria, permisos y tools seguras | Cerrado formalmente; ver `docs/12-cierre-formal-ia-0.md` |
 | IA-1 | Gastos y documentos | Menos carga manual y mejores sugerencias de clasificacion |
 | IA-2 | Asistente operativo | Preguntas financieras con fuentes y trazabilidad |
 | IA-3 | Conciliacion y rendiciones | Menor tiempo de cierre y preparacion de rendiciones |
